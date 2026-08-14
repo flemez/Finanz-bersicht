@@ -15,6 +15,7 @@ import {
   parseAmountToCents,
 } from '../format.js';
 import { openModal, toast, confirmDialog } from '../ui.js';
+import { icon } from '../icons.js';
 
 export async function renderTransactions(ctx) {
   const [transactions, accounts, categories] = await Promise.all([
@@ -38,7 +39,7 @@ export async function renderTransactions(ctx) {
   if (transactions.length === 0) {
     ctx.view.innerHTML = `
       <div class="empty">
-        <div class="empty__icon">↹</div>
+        <div class="empty__icon">${icon.transactions}</div>
         <p class="empty__title">Noch keine Buchungen</p>
         <p class="empty__text">Tippe auf „+“, um deine erste Buchung zu erfassen.</p>
       </div>`;
@@ -71,7 +72,7 @@ export async function renderTransactions(ctx) {
             <span class="list-row__sub">${esc(sub)}</span>
           </div>
           <div class="list-row__value ${amountClass}">${formatCents(t.amount)}</div>
-          <button class="icon-btn list-row__del" data-del="${t.id}" aria-label="Buchung löschen">🗑</button>
+          <button class="icon-btn list-row__del" data-del="${t.id}" aria-label="Buchung löschen">${icon.trash}</button>
         </div>`;
     }
   }

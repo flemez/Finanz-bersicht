@@ -14,6 +14,7 @@ import {
   esc,
 } from '../format.js';
 import { openModal, toast } from '../ui.js';
+import { icon } from '../icons.js';
 
 let activeMonth = currentMonth();
 
@@ -28,6 +29,11 @@ export async function renderBudget(ctx) {
         <span class="monthnav__label">${esc(formatMonth(activeMonth))}</span>
         <button class="icon-btn" data-month="next" aria-label="Nächster Monat">›</button>
       </div>`,
+    action: {
+      label: 'Verwalten',
+      aria: 'Kategorien verwalten',
+      onClick: () => ctx.navigate('categories'),
+    },
   });
 
   // Kategorien nach Gruppe bündeln.
@@ -110,7 +116,7 @@ export async function renderBudget(ctx) {
 function emptyState() {
   return `
     <div class="empty">
-      <div class="empty__icon">◧</div>
+      <div class="empty__icon">${icon.budget}</div>
       <p class="empty__title">Noch keine Kategorien</p>
       <p class="empty__text">Lege Umschläge an, um dein Geld zu verteilen.</p>
     </div>`;

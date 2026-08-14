@@ -1,7 +1,7 @@
 // Service Worker – macht die App offline nutzbar (App-Shell-Caching).
 // Bei jeder relevanten Änderung an den Dateien die Version erhöhen,
 // damit Clients den neuen Stand laden.
-const CACHE = 'finanzuebersicht-v4';
+const CACHE = 'finanzuebersicht-v5';
 
 const ASSETS = [
   './',
@@ -14,10 +14,12 @@ const ASSETS = [
   './js/format.js',
   './js/router.js',
   './js/ui.js',
+  './js/icons.js',
   './js/views/budget.js',
   './js/views/accounts.js',
   './js/views/transactions.js',
   './js/views/recurring.js',
+  './js/views/categories.js',
   './js/views/more.js',
   './icons/icon.svg',
 ];

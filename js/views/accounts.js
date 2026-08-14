@@ -10,6 +10,7 @@ import {
 } from '../store.js';
 import { formatCents, esc, parseAmountToCents, todayISO } from '../format.js';
 import { openModal, toast, confirmDialog } from '../ui.js';
+import { icon } from '../icons.js';
 
 const TYPES = {
   giro: 'Girokonto',
@@ -47,7 +48,7 @@ export async function renderAccounts(ctx) {
   if (accounts.length === 0) {
     html += `
       <div class="empty">
-        <div class="empty__icon">▤</div>
+        <div class="empty__icon">${icon.accounts}</div>
         <p class="empty__title">Noch keine Konten</p>
         <p class="empty__text">Lege dein erstes Konto an, um loszulegen.</p>
       </div>`;
@@ -63,7 +64,7 @@ export async function renderAccounts(ctx) {
             <span class="list-row__sub">${esc(TYPES[a.type] || a.type)}${a.onBudget ? '' : ' · außerhalb Budget'}</span>
           </div>
           <div class="list-row__value ${balClass}">${formatCents(bal)}</div>
-          <button class="icon-btn list-row__del" data-del="${a.id}" aria-label="Konto löschen">🗑</button>
+          <button class="icon-btn list-row__del" data-del="${a.id}" aria-label="Konto löschen">${icon.trash}</button>
         </div>`;
     }
     html += '</div>';

@@ -6,6 +6,7 @@ import { renderBudget } from './views/budget.js';
 import { renderAccounts } from './views/accounts.js';
 import { renderTransactions, openTransactionModal } from './views/transactions.js';
 import { renderRecurring } from './views/recurring.js';
+import { renderCategories } from './views/categories.js';
 import { renderMore } from './views/more.js';
 import { toast } from './ui.js';
 
@@ -55,6 +56,7 @@ const handlers = {
   accounts: () => renderAccounts(ctx),
   transactions: () => renderTransactions(ctx),
   recurring: () => renderRecurring(ctx),
+  categories: () => renderCategories(ctx),
   more: () => renderMore(ctx),
 };
 

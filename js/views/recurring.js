@@ -12,6 +12,7 @@ import {
 } from '../store.js';
 import { formatCents, esc, parseAmountToCents } from '../format.js';
 import { openModal, toast, confirmDialog } from '../ui.js';
+import { icon } from '../icons.js';
 
 export async function renderRecurring(ctx) {
   const [recs, accounts, categories] = await Promise.all([
@@ -42,7 +43,7 @@ export async function renderRecurring(ctx) {
   if (recs.length === 0) {
     html += `
       <div class="empty">
-        <div class="empty__icon">🔁</div>
+        <div class="empty__icon">${icon.recurring}</div>
         <p class="empty__title">Noch keine Fixkosten</p>
         <p class="empty__text">Lege z. B. Miete, Strom oder Abos an – sie werden dann monatlich automatisch gebucht.</p>
       </div>`;
@@ -65,7 +66,7 @@ export async function renderRecurring(ctx) {
             <span class="list-row__sub">${esc(sub)}</span>
           </div>
           <div class="list-row__value ${amountClass}">${formatCents(signedAmount)}</div>
-          <button class="icon-btn list-row__del" data-del="${r.id}" aria-label="Fixkosten löschen">🗑</button>
+          <button class="icon-btn list-row__del" data-del="${r.id}" aria-label="Fixkosten löschen">${icon.trash}</button>
         </div>`;
     }
     html += '</div>';

@@ -4,6 +4,7 @@ import { exportAll, importAll, clearAll } from '../db.js';
 import { seedIfEmpty } from '../store.js';
 import { toast, confirmDialog } from '../ui.js';
 import { todayISO } from '../format.js';
+import { icon } from '../icons.js';
 
 export async function renderMore(ctx) {
   ctx.setHeader({ title: 'Mehr' });
@@ -11,9 +12,10 @@ export async function renderMore(ctx) {
   ctx.view.innerHTML = `
     <div class="settings">
       <div class="settings-group">
-        <div class="settings-group__title">Fixkosten</div>
-        <p class="settings-note">Miete, Strom, Abos & Co. einmal festlegen – die App bucht sie jeden Monat automatisch.</p>
-        <button class="btn btn--block" id="btn-recurring">🔁 Fixkosten verwalten</button>
+        <div class="settings-group__title">Verwalten</div>
+        <p class="settings-note">Kategorien anpassen sowie Fixkosten festlegen, die jeden Monat automatisch gebucht werden.</p>
+        <button class="btn btn--block" id="btn-categories">Kategorien verwalten</button>
+        <button class="btn btn--block" id="btn-recurring">Fixkosten verwalten</button>
       </div>
 
       <div class="settings-group">
@@ -22,8 +24,8 @@ export async function renderMore(ctx) {
           Alle Daten liegen ausschließlich lokal auf diesem Gerät
           (privat, offline). Erstelle regelmäßig eine Sicherung.
         </p>
-        <button class="btn btn--block" id="btn-export">↓ Sicherung exportieren</button>
-        <button class="btn btn--block btn--ghost" id="btn-import">↑ Sicherung importieren</button>
+        <button class="btn btn--block" id="btn-export">${icon.download} Sicherung exportieren</button>
+        <button class="btn btn--block btn--ghost" id="btn-import">${icon.upload} Sicherung importieren</button>
         <input type="file" id="import-file" accept="application/json" hidden />
       </div>
 
@@ -33,7 +35,7 @@ export async function renderMore(ctx) {
       </div>
 
       <div class="settings-group settings-group--privacy">
-        <div class="settings-group__title">🔒 Datenschutz</div>
+        <div class="settings-group__title">Datenschutz</div>
         <p class="settings-note">
           <strong>Deine Finanzdaten verlassen niemals dein Gerät.</strong>
           Sie werden ausschließlich lokal auf diesem Handy gespeichert –
@@ -61,7 +63,8 @@ export async function renderMore(ctx) {
       </div>
     </div>`;
 
-  // Fixkosten verwalten.
+  // Kategorien & Fixkosten verwalten.
+  ctx.view.querySelector('#btn-categories').addEventListener('click', () => ctx.navigate('categories'));
   ctx.view.querySelector('#btn-recurring').addEventListener('click', () => ctx.navigate('recurring'));
 
   // Export als JSON-Datei herunterladen.
