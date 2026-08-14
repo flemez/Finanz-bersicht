@@ -490,6 +490,9 @@ body.no-scroll { overflow: hidden; }
 }
 .settings-group__title { font-weight: 700; margin-bottom: 10px; }
 .settings-note { color: var(--text-dim); font-size: 14px; line-height: 1.5; margin: 0 0 8px; }
+.settings-group--privacy { border-color: color-mix(in srgb, var(--positive) 45%, var(--border)); }
+.privacy-list { margin: 0 0 8px; padding-left: 18px; color: var(--text-dim); font-size: 14px; line-height: 1.6; }
+.privacy-list li { margin-bottom: 2px; }
 
 /* ---- Toast ---- */
 .toast {

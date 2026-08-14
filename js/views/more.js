@@ -32,6 +32,25 @@ export async function renderMore(ctx) {
         <button class="btn btn--block btn--danger" id="btn-reset">Alle Daten löschen</button>
       </div>
 
+      <div class="settings-group settings-group--privacy">
+        <div class="settings-group__title">🔒 Datenschutz</div>
+        <p class="settings-note">
+          <strong>Deine Finanzdaten verlassen niemals dein Gerät.</strong>
+          Sie werden ausschließlich lokal auf diesem Handy gespeichert –
+          es gibt keinen Server, kein Konto, keine Cloud.
+        </p>
+        <ul class="privacy-list">
+          <li>Es wird nichts hochgeladen oder an Dritte gesendet.</li>
+          <li>Keine Werbung, keine Tracker, keine Analyse.</li>
+          <li>Nur du kannst deine Daten sehen.</li>
+        </ul>
+        <p class="settings-note">
+          Weil alles nur lokal liegt: Wenn du den Browser-Speicher löschst
+          oder das Gerät wechselst, sind die Daten weg. Nutze deshalb
+          regelmäßig „Sicherung exportieren" (die Datei bleibt bei dir).
+        </p>
+      </div>
+
       <div class="settings-group">
         <div class="settings-group__title">Über die App</div>
         <p class="settings-note">
