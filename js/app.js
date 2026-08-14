@@ -4,7 +4,7 @@ import { register, setNotFound, startRouter, currentRoute, navigate } from './ro
 import { seedIfEmpty, postDueRecurring } from './store.js';
 import { renderBudget } from './views/budget.js';
 import { renderAccounts } from './views/accounts.js';
-import { renderTransactions, openTransactionModal } from './views/transactions.js';
+import { renderErfassen } from './views/erfassen.js';
 import { renderRecurring } from './views/recurring.js';
 import { renderCategories } from './views/categories.js';
 import { renderMore } from './views/more.js';
@@ -44,26 +44,25 @@ const ctx = {
   },
   refresh() {
     const { name } = currentRoute();
-    const handler = handlers[name] || handlers.budget;
+    const handler = handlers[name] || handlers.erfassen;
     handler();
   },
   navigate,
-  openTransactionModal: (opts) => openTransactionModal(ctx, opts),
 };
 
 const handlers = {
-  budget: () => renderBudget(ctx),
-  accounts: () => renderAccounts(ctx),
-  transactions: () => renderTransactions(ctx),
-  recurring: () => renderRecurring(ctx),
+  erfassen: () => renderErfassen(ctx),
   categories: () => renderCategories(ctx),
+  accounts: () => renderAccounts(ctx),
+  recurring: () => renderRecurring(ctx),
+  budget: () => renderBudget(ctx),
   more: () => renderMore(ctx),
 };
 
 for (const [name, handler] of Object.entries(handlers)) {
   register(name, handler);
 }
-setNotFound(handlers.budget);
+setNotFound(handlers.erfassen);
 
 // Aktiven Tab in der unteren Leiste markieren.
 function updateTabbar() {
@@ -73,11 +72,6 @@ function updateTabbar() {
   });
 }
 window.addEventListener('hashchange', updateTabbar);
-
-// Schwebender Knopf: neue Buchung.
-document.getElementById('fab-add').addEventListener('click', () => {
-  openTransactionModal(ctx, {});
-});
 
 async function boot() {
   // Service-Worker registrieren (offline-Fähigkeit).
@@ -102,7 +96,7 @@ async function boot() {
     console.warn('Fixkosten-Buchung fehlgeschlagen:', e);
   }
 
-  if (!location.hash) navigate('budget');
+  if (!location.hash) navigate('erfassen');
   startRouter();
   updateTabbar();
 }

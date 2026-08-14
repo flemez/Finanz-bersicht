@@ -88,6 +88,51 @@ export async function deleteCategory(id) {
   return db.remove('categories', id);
 }
 
+// ---- Kategorien (oben) und Unterkategorien -----------------------------------
+//
+// Struktur: Eine "Kategorie" ist die Gruppe (category.group), darunter liegen
+// die "Unterkategorien" (die einzelnen category-Einträge). Buchungen werden
+// immer einer Unterkategorie zugeordnet.
+
+/** Liefert Kategorien mit ihren Unterkategorien: [{ name, subs:[cat,...] }]. */
+export async function listGroups() {
+  const cats = await listCategories();
+  const map = new Map();
+  for (const c of cats) {
+    const g = c.group || 'Allgemein';
+    if (!map.has(g)) map.set(g, []);
+    map.get(g).push(c);
+  }
+  return [...map.entries()]
+    .map(([name, subs]) => ({ name, subs }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Neue Kategorie mit erster Unterkategorie anlegen. */
+export async function addGroup(groupName, firstSubName) {
+  const group = String(groupName).trim() || 'Allgemein';
+  const sub = String(firstSubName).trim() || 'Allgemein';
+  return addCategory({ name: sub, group });
+}
+
+/** Kategorie (Gruppe) umbenennen – verschiebt alle Unterkategorien mit. */
+export async function renameGroup(oldName, newName) {
+  const name = String(newName).trim();
+  if (!name) return;
+  const cats = await listCategories();
+  for (const c of cats.filter((c) => (c.group || 'Allgemein') === oldName)) {
+    await updateCategory({ ...c, group: name });
+  }
+}
+
+/** Ganze Kategorie inkl. aller Unterkategorien löschen. */
+export async function deleteGroup(name) {
+  const cats = await listCategories();
+  for (const c of cats.filter((c) => (c.group || 'Allgemein') === name)) {
+    await deleteCategory(c.id);
+  }
+}
+
 // ---- Buchungen --------------------------------------------------------------
 
 export async function listTransactions() {

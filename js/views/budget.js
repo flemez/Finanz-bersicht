@@ -23,6 +23,7 @@ export async function renderBudget(ctx) {
 
   ctx.setHeader({
     title: 'Budget',
+    back: () => ctx.navigate('more'),
     sub: `
       <div class="monthnav">
         <button class="icon-btn" data-month="prev" aria-label="Vorheriger Monat">‹</button>
@@ -30,7 +31,7 @@ export async function renderBudget(ctx) {
         <button class="icon-btn" data-month="next" aria-label="Nächster Monat">›</button>
       </div>`,
     action: {
-      label: 'Verwalten',
+      label: 'Kategorien',
       aria: 'Kategorien verwalten',
       onClick: () => ctx.navigate('categories'),
     },

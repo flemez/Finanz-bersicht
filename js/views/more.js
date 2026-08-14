@@ -13,9 +13,9 @@ export async function renderMore(ctx) {
     <div class="settings">
       <div class="settings-group">
         <div class="settings-group__title">Verwalten</div>
-        <p class="settings-note">Kategorien anpassen sowie Fixkosten festlegen, die jeden Monat automatisch gebucht werden.</p>
-        <button class="btn btn--block" id="btn-categories">Kategorien verwalten</button>
+        <p class="settings-note">Fixkosten festlegen (jeden Monat automatisch) und das Umschlag-Budget öffnen.</p>
         <button class="btn btn--block" id="btn-recurring">Fixkosten verwalten</button>
+        <button class="btn btn--block btn--ghost" id="btn-budget">Budget (Umschlag) öffnen</button>
       </div>
 
       <div class="settings-group">
@@ -79,9 +79,9 @@ export async function renderMore(ctx) {
       </div>
     </div>`;
 
-  // Kategorien & Fixkosten verwalten.
-  ctx.view.querySelector('#btn-categories').addEventListener('click', () => ctx.navigate('categories'));
+  // Fixkosten & Budget öffnen.
   ctx.view.querySelector('#btn-recurring').addEventListener('click', () => ctx.navigate('recurring'));
+  ctx.view.querySelector('#btn-budget').addEventListener('click', () => ctx.navigate('budget'));
 
   // Export als JSON-Datei herunterladen.
   ctx.view.querySelector('#btn-export').addEventListener('click', async () => {

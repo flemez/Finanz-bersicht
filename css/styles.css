@@ -247,6 +247,26 @@ body.no-scroll { overflow: hidden; }
 .badge.is-negative { color: var(--negative); background: color-mix(in srgb, var(--negative) 16%, transparent); }
 .badge.is-zero { color: var(--text-mute); }
 
+/* ---- Erfassen-Formular ---- */
+.entry-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+}
+.entry-row { display: flex; gap: 10px; }
+.entry-row .field { flex: 1; }
+.list-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 4px 4px 10px;
+}
+
 /* ---- Allgemeine Listen ---- */
 .list {
   background: var(--surface);
