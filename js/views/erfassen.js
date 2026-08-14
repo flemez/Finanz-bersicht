@@ -26,12 +26,6 @@ function categoryOptions(cats, selId) {
     .map((c) => `<option value="${c.id}"${c.id === selId ? ' selected' : ''}>${esc(c.name)}</option>`)
     .join('');
 }
-function subOptions(cat, selId) {
-  if (!cat || cat.subs.length === 0) return NONE;
-  return NONE + cat.subs
-    .map((s) => `<option value="${s.id}"${s.id === selId ? ' selected' : ''}>${esc(s.name)}</option>`)
-    .join('');
-}
 
 export async function renderErfassen(ctx) {
   const [transactions, accounts, cats] = await Promise.all([
@@ -74,10 +68,6 @@ export async function renderErfassen(ctx) {
           <label class="field">
             <span class="field__label">Kategorie</span>
             <select class="field__input field__input--big" name="categoryId">${categoryOptions(cats, firstCat.id)}</select>
-          </label>
-          <label class="field">
-            <span class="field__label">Unterkategorie (optional)</span>
-            <select class="field__input field__input--big" name="subcategoryId">${subOptions(firstCat, null)}</select>
           </label>`}
         </div>
         <div class="entry-row">
@@ -102,7 +92,7 @@ export async function renderErfassen(ctx) {
 
   ctx.view.innerHTML = html;
 
-  wireEntryForm(ctx, ctx.view.querySelector('#entry-form'), cats);
+  wireEntryForm(ctx, ctx.view.querySelector('#entry-form'));
   ctx.view.querySelectorAll('[data-edit]').forEach((row) => {
     row.addEventListener('click', () => {
       const t = transactions.find((x) => x.id === row.dataset.edit);
@@ -150,17 +140,7 @@ function renderList(transactions, accounts, cats) {
   return html;
 }
 
-function wireCatSelects(container, cats) {
-  const catSel = container.querySelector('select[name="categoryId"]');
-  const subSel = container.querySelector('select[name="subcategoryId"]');
-  if (!catSel || !subSel) return;
-  catSel.addEventListener('change', () => {
-    const c = cats.find((x) => x.id === catSel.value);
-    subSel.innerHTML = subOptions(c, null);
-  });
-}
-
-function wireEntryForm(ctx, form, cats) {
+function wireEntryForm(ctx, form) {
   if (!form) return;
   const kindInput = form.querySelector('input[name="kind"]');
   const catFields = form.querySelector('.cat-fields');
@@ -172,7 +152,6 @@ function wireEntryForm(ctx, form, cats) {
       catFields.style.display = btn.dataset.kind === 'income' ? 'none' : '';
     });
   });
-  wireCatSelects(form, cats);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -185,7 +164,7 @@ function wireEntryForm(ctx, form, cats) {
       date: data.date || todayISO(),
       payee: data.payee || '',
       categoryId: data.kind === 'income' ? null : data.categoryId || null,
-      subcategoryId: data.kind === 'income' ? null : data.subcategoryId || null,
+      subcategoryId: null,
       amount: signed,
     });
     toast('Gespeichert');
@@ -195,7 +174,6 @@ function wireEntryForm(ctx, form, cats) {
 
 function openEditor(ctx, t, accounts, cats) {
   const kind = t.amount >= 0 ? 'income' : 'expense';
-  const curCat = t.categoryId ? cats.find((c) => c.id === t.categoryId) : null;
   const accOptions = accounts
     .map((a) => `<option value="${a.id}"${a.id === t.accountId ? ' selected' : ''}>${esc(a.name)}</option>`)
     .join('');
@@ -216,10 +194,6 @@ function openEditor(ctx, t, accounts, cats) {
        <label class="field">
          <span class="field__label">Kategorie</span>
          <select class="field__input field__input--big" name="categoryId">${categoryOptions(cats, t.categoryId)}</select>
-       </label>
-       <label class="field">
-         <span class="field__label">Unterkategorie (optional)</span>
-         <select class="field__input field__input--big" name="subcategoryId">${subOptions(curCat, t.subcategoryId)}</select>
        </label>
      </div>
      <label class="field">
@@ -251,7 +225,6 @@ function openEditor(ctx, t, accounts, cats) {
       catFields.style.display = btn.dataset.kind === 'income' ? 'none' : '';
     });
   });
-  wireCatSelects(m.el, cats);
 
   m.el.querySelector('[data-action="delete"]').addEventListener('click', async () => {
     const ok = await confirmDialog('Buchung löschen?', 'Diese Buchung wird entfernt.');
@@ -267,13 +240,15 @@ function openEditor(ctx, t, accounts, cats) {
     const cents = parseAmountToCents(data.amount);
     if (cents == null || cents === 0) return toast('Bitte einen gültigen Betrag eingeben');
     const signed = data.kind === 'income' ? Math.abs(cents) : -Math.abs(cents);
+    const newCat = data.kind === 'income' ? null : data.categoryId || null;
     await updateTransaction({
       ...t,
       accountId: data.accountId,
       date: data.date || todayISO(),
       payee: (data.payee || '').trim(),
-      categoryId: data.kind === 'income' ? null : data.categoryId || null,
-      subcategoryId: data.kind === 'income' ? null : data.subcategoryId || null,
+      categoryId: newCat,
+      // Bestehende Unterkategorie nur behalten, wenn die Kategorie gleich bleibt.
+      subcategoryId: newCat && newCat === t.categoryId ? t.subcategoryId || null : null,
       amount: signed,
     });
     close();
