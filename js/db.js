@@ -70,6 +70,16 @@ export async function get(store, id) {
 }
 
 export async function put(store, value) {
+  // Jede Änderung bekommt einen "zuletzt geändert"-Zeitstempel,
+  // damit beim Zusammenführen (Merge) die neuere Version gewinnt.
+  const v = { ...value, updatedAt: new Date().toISOString() };
+  const os = await tx(store, 'readwrite');
+  await reqToPromise(os.put(v));
+  return v;
+}
+
+/** Schreibt den Datensatz unverändert (ohne Zeitstempel zu erneuern). */
+export async function putRaw(store, value) {
   const os = await tx(store, 'readwrite');
   await reqToPromise(os.put(value));
   return value;
@@ -122,4 +132,41 @@ export async function importAll(payload) {
       await put(store, row);
     }
   }
+}
+
+/**
+ * Daten von einem anderen Gerät ZUSAMMENFÜHREN (Merge), statt zu ersetzen.
+ * - Fehlende Einträge (neue ID) werden ergänzt.
+ * - Bei gleicher ID gewinnt die neuere Version (updatedAt bzw. createdAt).
+ * - Nichts wird gelöscht (reines Zusammenführen überträgt keine Löschungen).
+ * Liefert eine kleine Statistik { added, updated }.
+ */
+export async function mergeImport(payload) {
+  const data = payload && payload.data ? payload.data : {};
+  const stores = ['accounts', 'categories', 'transactions', 'budgets', 'recurring'];
+  const stats = { added: 0, updated: 0 };
+
+  for (const store of stores) {
+    const rows = Array.isArray(data[store]) ? data[store] : [];
+    if (rows.length === 0) continue;
+    const localRows = await getAll(store);
+    const localById = new Map(localRows.map((r) => [r.id, r]));
+
+    for (const row of rows) {
+      if (!row || row.id == null) continue;
+      const local = localById.get(row.id);
+      if (!local) {
+        await putRaw(store, row);
+        stats.added++;
+      } else {
+        const incomingTs = row.updatedAt || row.createdAt || '';
+        const localTs = local.updatedAt || local.createdAt || '';
+        if (incomingTs > localTs) {
+          await putRaw(store, row);
+          stats.updated++;
+        }
+      }
+    }
+  }
+  return stats;
 }

@@ -1,6 +1,6 @@
 // "Mehr"-Ansicht: Datensicherung, Import, Zurücksetzen, Infos.
 
-import { exportAll, importAll, clearAll } from '../db.js';
+import { exportAll, importAll, mergeImport, clearAll } from '../db.js';
 import { seedIfEmpty } from '../store.js';
 import { toast, confirmDialog } from '../ui.js';
 import { todayISO } from '../format.js';
@@ -25,8 +25,24 @@ export async function renderMore(ctx) {
           (privat, offline). Erstelle regelmäßig eine Sicherung.
         </p>
         <button class="btn btn--block" id="btn-export">${icon.download} Sicherung exportieren</button>
-        <button class="btn btn--block btn--ghost" id="btn-import">${icon.upload} Sicherung importieren</button>
+        <button class="btn btn--block btn--ghost" id="btn-import">${icon.upload} Sicherung importieren (ersetzen)</button>
         <input type="file" id="import-file" accept="application/json" hidden />
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group__title">Zwei Geräte abgleichen</div>
+        <p class="settings-note">
+          Zusammenführen statt ersetzen: Exportiere auf dem anderen Handy eine
+          Sicherung und importiere sie hier. Die App ergänzt nur fehlende
+          Einträge – nichts wird überschrieben. Für einen echten Abgleich in
+          beide Richtungen auf beiden Geräten durchführen.
+        </p>
+        <button class="btn btn--block" id="btn-merge">${icon.upload} Daten zusammenführen</button>
+        <input type="file" id="merge-file" accept="application/json" hidden />
+        <p class="settings-note" style="margin-top:8px">
+          Hinweis: Beim Zusammenführen werden Löschungen nicht übertragen –
+          gelöschte Einträge des anderen Geräts können dabei wieder auftauchen.
+        </p>
       </div>
 
       <div class="settings-group">
@@ -106,6 +122,33 @@ export async function renderMore(ctx) {
       toast('Datei konnte nicht gelesen werden');
     } finally {
       fileInput.value = '';
+    }
+  });
+
+  // Zwei Geräte zusammenführen (Merge).
+  const mergeInput = ctx.view.querySelector('#merge-file');
+  ctx.view.querySelector('#btn-merge').addEventListener('click', () => mergeInput.click());
+  mergeInput.addEventListener('change', async () => {
+    const file = mergeInput.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      if (!payload || !payload.data) {
+        toast('Das ist keine gültige Sicherungsdatei');
+        return;
+      }
+      const stats = await mergeImport(payload);
+      const parts = [];
+      if (stats.added) parts.push(`${stats.added} neu`);
+      if (stats.updated) parts.push(`${stats.updated} aktualisiert`);
+      toast(parts.length ? `Zusammengeführt: ${parts.join(', ')}` : 'Alles bereits aktuell');
+      ctx.navigate('budget');
+    } catch (e) {
+      console.error(e);
+      toast('Datei konnte nicht gelesen werden');
+    } finally {
+      mergeInput.value = '';
     }
   });
 
