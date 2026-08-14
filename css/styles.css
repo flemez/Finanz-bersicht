@@ -389,6 +389,26 @@ body.no-scroll { overflow: hidden; }
 .field--check { display: flex; align-items: center; gap: 10px; }
 .field--check input { width: 20px; height: 20px; }
 
+.field__input--big { font-size: 17px; padding: 15px 14px; }
+
+.more-details {
+  margin: 6px 0 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.more-details > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 6px 0;
+}
+.more-details > summary::-webkit-details-marker { display: none; }
+.more-details > summary::before { content: '▸ '; }
+.more-details[open] > summary::before { content: '▾ '; }
+.more-details[open] > summary { margin-bottom: 8px; }
+
 .segmented {
   display: flex;
   background: var(--bg-elev-2);

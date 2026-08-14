@@ -117,7 +117,7 @@ export async function openTransactionModal(ctx, opts = {}) {
     if (!catGroups.has(g)) catGroups.set(g, []);
     catGroups.get(g).push(c);
   }
-  let catOptions = '<option value="">– Keine (z. B. Einnahme) –</option>';
+  let catOptions = '<option value="">– Noch nicht zuordnen –</option>';
   for (const [g, cs] of catGroups) {
     catOptions += `<optgroup label="${esc(g)}">`;
     catOptions += cs.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
@@ -125,7 +125,7 @@ export async function openTransactionModal(ctx, opts = {}) {
   }
 
   const m = openModal(
-    'Neue Buchung',
+    'Schnell erfassen',
     `<div class="segmented" role="tablist">
        <button type="button" class="segmented__btn segmented__btn--active" data-kind="expense">Ausgabe</button>
        <button type="button" class="segmented__btn" data-kind="income">Einnahme</button>
@@ -134,28 +134,31 @@ export async function openTransactionModal(ctx, opts = {}) {
      <label class="field">
        <span class="field__label">Betrag</span>
        <input class="field__input field__input--amount" name="amount" inputmode="decimal"
-              placeholder="0,00" required />
-     </label>
-     <label class="field">
-       <span class="field__label">Konto</span>
-       <select class="field__input" name="accountId">${accOptions}</select>
+              placeholder="0,00" required autofocus />
      </label>
      <label class="field field--category">
-       <span class="field__label">Kategorie</span>
-       <select class="field__input" name="categoryId">${catOptions}</select>
+       <span class="field__label">Wohin einsortieren? (Kategorie)</span>
+       <select class="field__input field__input--big" name="categoryId">${catOptions}</select>
      </label>
-     <label class="field">
-       <span class="field__label">Empfänger / Zweck</span>
-       <input class="field__input" name="payee" placeholder="z. B. Supermarkt" />
-     </label>
-     <label class="field">
-       <span class="field__label">Datum</span>
-       <input class="field__input" type="date" name="date" value="${todayISO()}" />
-     </label>
-     <label class="field">
-       <span class="field__label">Notiz</span>
-       <input class="field__input" name="note" placeholder="optional" />
-     </label>`,
+     <details class="more-details">
+       <summary>Mehr Details (Konto, Empfänger, Datum, Notiz)</summary>
+       <label class="field">
+         <span class="field__label">Konto</span>
+         <select class="field__input" name="accountId">${accOptions}</select>
+       </label>
+       <label class="field">
+         <span class="field__label">Empfänger / Zweck</span>
+         <input class="field__input" name="payee" placeholder="z. B. Supermarkt" />
+       </label>
+       <label class="field">
+         <span class="field__label">Datum</span>
+         <input class="field__input" type="date" name="date" value="${todayISO()}" />
+       </label>
+       <label class="field">
+         <span class="field__label">Notiz</span>
+         <input class="field__input" name="note" placeholder="optional" />
+       </label>
+     </details>`,
     [
       { label: 'Abbrechen', value: 'cancel', variant: 'ghost' },
       { label: 'Speichern', value: 'ok', variant: 'primary' },
