@@ -236,6 +236,25 @@ export async function computeBudget(month) {
 //
 // Da die App lokal ohne Server läuft, werden fällige Fixkosten beim Öffnen
 // der App automatisch nachgebucht (siehe postDueRecurring).
+//
+// Ein Betrag wird pro Intervall angegeben (z. B. 1.200 € jährlich) und
+// anteilig pro Monat gebucht ("runtergebrochen auf den Monat", z. B. 100 €).
+
+export const INTERVALS = {
+  monthly: { label: 'Monatlich', months: 1 },
+  quarterly: { label: 'Vierteljährlich', months: 3 },
+  halfyearly: { label: 'Halbjährlich', months: 6 },
+  yearly: { label: 'Jährlich', months: 12 },
+};
+
+export function intervalMonths(interval) {
+  return (INTERVALS[interval] || INTERVALS.monthly).months;
+}
+
+/** Auf den Monat heruntergerechneter Betrag (in Cent). */
+export function monthlyCents(rec) {
+  return Math.round(Math.abs(rec.amount || 0) / intervalMonths(rec.interval || 'monthly'));
+}
 
 export async function listRecurring() {
   const rows = await db.getAll('recurring');
@@ -249,6 +268,7 @@ export async function addRecurring({
   name,
   type = 'expense',
   amount,
+  interval = 'monthly',
   categoryId = null,
   accountId,
   dayOfMonth = 1,
@@ -258,6 +278,7 @@ export async function addRecurring({
     name: String(name).trim(),
     type,
     amount: Math.abs(amount | 0),
+    interval: INTERVALS[interval] ? interval : 'monthly',
     categoryId: type === 'income' ? null : categoryId || null,
     accountId,
     dayOfMonth: Math.min(28, Math.max(1, dayOfMonth | 0)),
@@ -302,13 +323,19 @@ export async function postDueRecurring() {
       if (isCurrent && curDay < rec.dayOfMonth) break;
 
       const day = String(Math.min(28, rec.dayOfMonth)).padStart(2, '0');
+      // Auf den Monat heruntergerechneter Anteil.
+      const perMonth = monthlyCents(rec);
+      const label = (INTERVALS[rec.interval] || INTERVALS.monthly).label.toLowerCase();
       await addTransaction({
         accountId: rec.accountId,
         date: `${month}-${day}`,
         payee: rec.name,
         categoryId: rec.type === 'income' ? null : rec.categoryId || null,
-        amount: rec.type === 'income' ? Math.abs(rec.amount) : -Math.abs(rec.amount),
-        note: 'Automatische Fixkosten-Buchung',
+        amount: rec.type === 'income' ? perMonth : -perMonth,
+        note:
+          (rec.interval && rec.interval !== 'monthly')
+            ? `Fixkosten anteilig (${label})`
+            : 'Automatische Fixkosten-Buchung',
       });
       rec.lastPosted = month;
       changed = true;
