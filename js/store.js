@@ -8,7 +8,7 @@
 //  - Jede Kategorie hat ein "Verfügbar", das von Monat zu Monat übertragen wird.
 
 import * as db from './db.js';
-import { uid, currentMonth } from './format.js';
+import { uid, currentMonth, todayISO, shiftMonth } from './format.js';
 
 // ---- Konten -----------------------------------------------------------------
 
@@ -230,6 +230,95 @@ export async function computeBudget(month) {
   };
 
   return { month, rows, toAssign, totals };
+}
+
+// ---- Fixkosten / wiederkehrende Buchungen -----------------------------------
+//
+// Da die App lokal ohne Server läuft, werden fällige Fixkosten beim Öffnen
+// der App automatisch nachgebucht (siehe postDueRecurring).
+
+export async function listRecurring() {
+  const rows = await db.getAll('recurring');
+  return rows.sort(
+    (a, b) => (a.dayOfMonth ?? 1) - (b.dayOfMonth ?? 1) ||
+      (a.name || '').localeCompare(b.name || '')
+  );
+}
+
+export async function addRecurring({
+  name,
+  type = 'expense',
+  amount,
+  categoryId = null,
+  accountId,
+  dayOfMonth = 1,
+}) {
+  const rec = {
+    id: uid(),
+    name: String(name).trim(),
+    type,
+    amount: Math.abs(amount | 0),
+    categoryId: type === 'income' ? null : categoryId || null,
+    accountId,
+    dayOfMonth: Math.min(28, Math.max(1, dayOfMonth | 0)),
+    active: true,
+    startMonth: currentMonth(),
+    lastPosted: null,
+    createdAt: new Date().toISOString(),
+  };
+  return db.put('recurring', rec);
+}
+
+export async function updateRecurring(rec) {
+  return db.put('recurring', rec);
+}
+
+export async function deleteRecurring(id) {
+  return db.remove('recurring', id);
+}
+
+/**
+ * Alle fälligen Fixkosten automatisch als Buchung nachtragen.
+ * Wird beim App-Start aufgerufen. Bucht jeden ausstehenden Monat vom
+ * Startmonat bis zum aktuellen Monat (aktueller Monat erst ab dem
+ * eingestellten Tag). Liefert die Anzahl neu erstellter Buchungen.
+ */
+export async function postDueRecurring() {
+  const recs = await db.getAll('recurring');
+  const curMonth = currentMonth();
+  const curDay = Number(todayISO().slice(8, 10));
+  let created = 0;
+
+  for (const rec of recs) {
+    if (!rec.active) continue;
+    let month = rec.lastPosted ? shiftMonth(rec.lastPosted, 1) : rec.startMonth || curMonth;
+    let changed = false;
+
+    // Sicherheitsgrenze gegen Endlosschleifen.
+    let guard = 0;
+    while (month <= curMonth && guard++ < 600) {
+      const isCurrent = month === curMonth;
+      // Aktuellen Monat nur buchen, wenn der Fälligkeitstag erreicht ist.
+      if (isCurrent && curDay < rec.dayOfMonth) break;
+
+      const day = String(Math.min(28, rec.dayOfMonth)).padStart(2, '0');
+      await addTransaction({
+        accountId: rec.accountId,
+        date: `${month}-${day}`,
+        payee: rec.name,
+        categoryId: rec.type === 'income' ? null : rec.categoryId || null,
+        amount: rec.type === 'income' ? Math.abs(rec.amount) : -Math.abs(rec.amount),
+        note: 'Automatische Fixkosten-Buchung',
+      });
+      rec.lastPosted = month;
+      changed = true;
+      created++;
+      month = shiftMonth(month, 1);
+    }
+
+    if (changed) await db.put('recurring', rec);
+  }
+  return created;
 }
 
 // ---- Ersteinrichtung --------------------------------------------------------

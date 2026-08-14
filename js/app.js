@@ -1,11 +1,13 @@
 // Einstiegspunkt der App: Service-Worker, Ersteinrichtung, Routing, Navigation.
 
 import { register, setNotFound, startRouter, currentRoute, navigate } from './router.js';
-import { seedIfEmpty } from './store.js';
+import { seedIfEmpty, postDueRecurring } from './store.js';
 import { renderBudget } from './views/budget.js';
 import { renderAccounts } from './views/accounts.js';
 import { renderTransactions, openTransactionModal } from './views/transactions.js';
+import { renderRecurring } from './views/recurring.js';
 import { renderMore } from './views/more.js';
+import { toast } from './ui.js';
 
 const viewEl = document.getElementById('view');
 const headerTitle = document.getElementById('header-title');
@@ -52,6 +54,7 @@ const handlers = {
   budget: () => renderBudget(ctx),
   accounts: () => renderAccounts(ctx),
   transactions: () => renderTransactions(ctx),
+  recurring: () => renderRecurring(ctx),
   more: () => renderMore(ctx),
 };
 
@@ -85,6 +88,17 @@ async function boot() {
   }
 
   await seedIfEmpty();
+
+  // Fällige Fixkosten automatisch nachbuchen.
+  try {
+    const created = await postDueRecurring();
+    if (created > 0) {
+      const label = created === 1 ? '1 Fixkosten-Buchung' : `${created} Fixkosten-Buchungen`;
+      setTimeout(() => toast(`${label} automatisch eingetragen`), 400);
+    }
+  } catch (e) {
+    console.warn('Fixkosten-Buchung fehlgeschlagen:', e);
+  }
 
   if (!location.hash) navigate('budget');
   startRouter();

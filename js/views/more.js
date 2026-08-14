@@ -11,6 +11,12 @@ export async function renderMore(ctx) {
   ctx.view.innerHTML = `
     <div class="settings">
       <div class="settings-group">
+        <div class="settings-group__title">Fixkosten</div>
+        <p class="settings-note">Miete, Strom, Abos & Co. einmal festlegen – die App bucht sie jeden Monat automatisch.</p>
+        <button class="btn btn--block" id="btn-recurring">🔁 Fixkosten verwalten</button>
+      </div>
+
+      <div class="settings-group">
         <div class="settings-group__title">Deine Daten</div>
         <p class="settings-note">
           Alle Daten liegen ausschließlich lokal auf diesem Gerät
@@ -35,6 +41,9 @@ export async function renderMore(ctx) {
         </p>
       </div>
     </div>`;
+
+  // Fixkosten verwalten.
+  ctx.view.querySelector('#btn-recurring').addEventListener('click', () => ctx.navigate('recurring'));
 
   // Export als JSON-Datei herunterladen.
   ctx.view.querySelector('#btn-export').addEventListener('click', async () => {

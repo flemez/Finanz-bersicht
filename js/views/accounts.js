@@ -6,8 +6,9 @@ import {
   accountBalance,
   addAccount,
   deleteAccount,
+  addTransaction,
 } from '../store.js';
-import { formatCents, esc } from '../format.js';
+import { formatCents, esc, parseAmountToCents, todayISO } from '../format.js';
 import { openModal, toast, confirmDialog } from '../ui.js';
 
 const TYPES = {
@@ -100,6 +101,11 @@ function openAccountModal(ctx) {
        <span class="field__label">Art</span>
        <select class="field__input" name="type">${options}</select>
      </label>
+     <label class="field">
+       <span class="field__label">Aktueller Kontostand (optional)</span>
+       <input class="field__input field__input--amount" name="startBalance" inputmode="decimal" placeholder="0,00" />
+       <span class="field__hint">Trägt deinen jetzigen Stand als Startsaldo ein. Bei Schulden (z. B. Kreditkarte) ein Minus davor.</span>
+     </label>
      <label class="field field--check">
        <input type="checkbox" name="onBudget" checked />
        <span>Zum Budget zählen</span>
@@ -112,11 +118,23 @@ function openAccountModal(ctx) {
   m.onSubmit(async (value, data, close) => {
     if (value !== 'ok') return close();
     if (!data.name || !data.name.trim()) return toast('Bitte einen Namen eingeben');
-    await addAccount({
+    const account = await addAccount({
       name: data.name,
       type: data.type || 'giro',
       onBudget: data.onBudget === 'on',
     });
+    // Optionalen Startsaldo als Eröffnungsbuchung anlegen.
+    const startCents = parseAmountToCents(data.startBalance);
+    if (startCents) {
+      await addTransaction({
+        accountId: account.id,
+        date: todayISO(),
+        payee: 'Startsaldo',
+        categoryId: null,
+        amount: startCents,
+        note: 'Eröffnungssaldo',
+      });
+    }
     close();
     toast('Konto angelegt');
     renderAccounts(ctx);

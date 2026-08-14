@@ -6,11 +6,13 @@
 //   categories    { id, name, group, sortOrder, createdAt }
 //   transactions  { id, accountId, date, payee, categoryId, amount, note, createdAt }
 //   budgets       { id: "YYYY-MM:categoryId", month, categoryId, budgeted }
+//   recurring     { id, name, type, amount, categoryId, accountId, dayOfMonth,
+//                   active, startMonth, lastPosted, createdAt }
 //
 // Beträge (amount, budgeted) sind ganze Cent (Integer).
 
 const DB_NAME = 'finanzuebersicht';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -35,6 +37,9 @@ function openDB() {
       if (!db.objectStoreNames.contains('budgets')) {
         const s = db.createObjectStore('budgets', { keyPath: 'id' });
         s.createIndex('by_month', 'month');
+      }
+      if (!db.objectStoreNames.contains('recurring')) {
+        db.createObjectStore('recurring', { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -78,7 +83,7 @@ export async function remove(store, id) {
 export async function clearAll() {
   const db = await openDB();
   await Promise.all(
-    ['accounts', 'categories', 'transactions', 'budgets'].map(
+    ['accounts', 'categories', 'transactions', 'budgets', 'recurring'].map(
       (name) =>
         new Promise((resolve, reject) => {
           const r = db.transaction(name, 'readwrite').objectStore(name).clear();
@@ -91,17 +96,18 @@ export async function clearAll() {
 
 /** Kompletten Datenbestand als einfaches Objekt exportieren (für Backups). */
 export async function exportAll() {
-  const [accounts, categories, transactions, budgets] = await Promise.all([
+  const [accounts, categories, transactions, budgets, recurring] = await Promise.all([
     getAll('accounts'),
     getAll('categories'),
     getAll('transactions'),
     getAll('budgets'),
+    getAll('recurring'),
   ]);
   return {
     app: 'finanzuebersicht',
     version: DB_VERSION,
     exportedAt: new Date().toISOString(),
-    data: { accounts, categories, transactions, budgets },
+    data: { accounts, categories, transactions, budgets, recurring },
   };
 }
 
@@ -109,7 +115,7 @@ export async function exportAll() {
 export async function importAll(payload) {
   const data = payload && payload.data ? payload.data : {};
   await clearAll();
-  const stores = ['accounts', 'categories', 'transactions', 'budgets'];
+  const stores = ['accounts', 'categories', 'transactions', 'budgets', 'recurring'];
   for (const store of stores) {
     const rows = Array.isArray(data[store]) ? data[store] : [];
     for (const row of rows) {
