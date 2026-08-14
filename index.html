@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#111827" />
+  <title>Finanzübersicht</title>
+  <meta name="description" content="Einfache, private Finanzübersicht mit Umschlag-Budgetierung – offline nutzbar am Handy." />
+
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icons/icon-180.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Finanzen" />
+
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Kopfbereich -->
+    <header class="app-header" id="app-header">
+      <div class="app-header__inner">
+        <button class="icon-btn app-header__back" id="header-back" aria-label="Zurück" hidden>‹</button>
+        <h1 class="app-header__title" id="header-title">Budget</h1>
+        <button class="icon-btn app-header__action" id="header-action" aria-label="Aktion" hidden></button>
+      </div>
+      <div class="app-header__sub" id="header-sub"></div>
+    </header>
+
+    <!-- Hauptinhalt (wird pro Ansicht gefüllt) -->
+    <main class="app-main" id="view"></main>
+
+    <!-- Schwebender Aktionsknopf zum Buchen -->
+    <button class="fab" id="fab-add" aria-label="Buchung hinzufügen">+</button>
+
+    <!-- Untere Navigation -->
+    <nav class="tabbar" id="tabbar">
+      <a class="tabbar__item" data-route="budget" href="#/budget">
+        <span class="tabbar__icon">◧</span><span class="tabbar__label">Budget</span>
+      </a>
+      <a class="tabbar__item" data-route="accounts" href="#/accounts">
+        <span class="tabbar__icon">▤</span><span class="tabbar__label">Konten</span>
+      </a>
+      <a class="tabbar__item" data-route="transactions" href="#/transactions">
+        <span class="tabbar__icon">↹</span><span class="tabbar__label">Buchungen</span>
+      </a>
+      <a class="tabbar__item" data-route="more" href="#/more">
+        <span class="tabbar__icon">⋯</span><span class="tabbar__label">Mehr</span>
+      </a>
+    </nav>
+  </div>
+
+  <!-- Overlay-Container für Dialoge -->
+  <div id="modal-root"></div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

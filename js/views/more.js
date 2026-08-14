@@ -1,0 +1,93 @@
+// "Mehr"-Ansicht: Datensicherung, Import, Zurücksetzen, Infos.
+
+import { exportAll, importAll, clearAll } from '../db.js';
+import { seedIfEmpty } from '../store.js';
+import { toast, confirmDialog } from '../ui.js';
+import { todayISO } from '../format.js';
+
+export async function renderMore(ctx) {
+  ctx.setHeader({ title: 'Mehr' });
+
+  ctx.view.innerHTML = `
+    <div class="settings">
+      <div class="settings-group">
+        <div class="settings-group__title">Deine Daten</div>
+        <p class="settings-note">
+          Alle Daten liegen ausschließlich lokal auf diesem Gerät
+          (privat, offline). Erstelle regelmäßig eine Sicherung.
+        </p>
+        <button class="btn btn--block" id="btn-export">↓ Sicherung exportieren</button>
+        <button class="btn btn--block btn--ghost" id="btn-import">↑ Sicherung importieren</button>
+        <input type="file" id="import-file" accept="application/json" hidden />
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group__title">Zurücksetzen</div>
+        <button class="btn btn--block btn--danger" id="btn-reset">Alle Daten löschen</button>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group__title">Über die App</div>
+        <p class="settings-note">
+          <strong>Finanzübersicht</strong> – eine schlanke, private Budget-App
+          mit Umschlag-Prinzip, inspiriert von Actual Budget.
+          Läuft komplett im Browser, auch offline.
+        </p>
+      </div>
+    </div>`;
+
+  // Export als JSON-Datei herunterladen.
+  ctx.view.querySelector('#btn-export').addEventListener('click', async () => {
+    const payload = await exportAll();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `finanzuebersicht-backup-${todayISO()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('Sicherung heruntergeladen');
+  });
+
+  // Import.
+  const fileInput = ctx.view.querySelector('#import-file');
+  ctx.view.querySelector('#btn-import').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const ok = await confirmDialog(
+        'Sicherung importieren?',
+        'Der aktuelle Datenbestand wird dabei vollständig ersetzt.'
+      );
+      if (!ok) return;
+      await importAll(payload);
+      toast('Sicherung importiert');
+      ctx.navigate('budget');
+    } catch (e) {
+      console.error(e);
+      toast('Datei konnte nicht gelesen werden');
+    } finally {
+      fileInput.value = '';
+    }
+  });
+
+  // Alles löschen.
+  ctx.view.querySelector('#btn-reset').addEventListener('click', async () => {
+    const ok = await confirmDialog(
+      'Wirklich alles löschen?',
+      'Konten, Buchungen und Budgets werden unwiderruflich entfernt und durch Beispieldaten ersetzt.'
+    );
+    if (!ok) return;
+    await clearAll();
+    await seedIfEmpty();
+    toast('Zurückgesetzt');
+    ctx.navigate('budget');
+  });
+}
