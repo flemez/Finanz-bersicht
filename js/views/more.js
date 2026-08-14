@@ -12,10 +12,9 @@ export async function renderMore(ctx) {
   ctx.view.innerHTML = `
     <div class="settings">
       <div class="settings-group">
-        <div class="settings-group__title">Verwalten</div>
-        <p class="settings-note">Fixkosten festlegen (jeden Monat automatisch) und das Umschlag-Budget öffnen.</p>
+        <div class="settings-group__title">Fixkosten</div>
+        <p class="settings-note">Miete, Strom, Abos & Co. einmal festlegen – die App bucht sie jeden Monat automatisch (anteilig).</p>
         <button class="btn btn--block" id="btn-recurring">Fixkosten verwalten</button>
-        <button class="btn btn--block btn--ghost" id="btn-budget">Budget (Umschlag) öffnen</button>
       </div>
 
       <div class="settings-group">
@@ -79,9 +78,8 @@ export async function renderMore(ctx) {
       </div>
     </div>`;
 
-  // Fixkosten & Budget öffnen.
+  // Fixkosten verwalten.
   ctx.view.querySelector('#btn-recurring').addEventListener('click', () => ctx.navigate('recurring'));
-  ctx.view.querySelector('#btn-budget').addEventListener('click', () => ctx.navigate('budget'));
 
   // Export als JSON-Datei herunterladen.
   ctx.view.querySelector('#btn-export').addEventListener('click', async () => {

@@ -1,7 +1,7 @@
 // Einstiegspunkt der App: Service-Worker, Ersteinrichtung, Routing, Navigation.
 
 import { register, setNotFound, startRouter, currentRoute, navigate } from './router.js';
-import { seedIfEmpty, postDueRecurring } from './store.js';
+import { seedIfEmpty, postDueRecurring, migrateModel } from './store.js';
 import { renderBudget } from './views/budget.js';
 import { renderAccounts } from './views/accounts.js';
 import { renderErfassen } from './views/erfassen.js';
@@ -81,6 +81,13 @@ async function boot() {
     } catch (e) {
       console.warn('Service-Worker konnte nicht registriert werden:', e);
     }
+  }
+
+  // Vorhandene Daten aus altem Modell (falls nötig) migrieren.
+  try {
+    await migrateModel();
+  } catch (e) {
+    console.warn('Migration fehlgeschlagen:', e);
   }
 
   await seedIfEmpty();

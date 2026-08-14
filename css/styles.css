@@ -227,6 +227,8 @@ body.no-scroll { overflow: hidden; }
 .cat-row__tools { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .cat-row__tools .icon-btn { width: 38px; height: 38px; font-size: 18px; color: var(--text-dim); }
 .cat-row__tools .icon-btn[disabled] { opacity: 0.3; pointer-events: none; }
+.cat-row--empty { padding: 10px 16px; }
+.cat-row__hint { color: var(--text-mute); font-size: 13px; font-style: italic; }
 
 .budget-hint {
   margin: 4px 4px 0;

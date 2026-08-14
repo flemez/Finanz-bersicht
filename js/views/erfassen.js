@@ -1,5 +1,5 @@
-// "Erfassen"-Ansicht: Einnahmen/Ausgaben eingeben (Kategorie -> Unterkategorie)
-// und bereits erfasste Buchungen bearbeiten oder löschen.
+// "Erfassen"-Ansicht: Einnahmen/Ausgaben eingeben und einer Kategorie
+// zuordnen (Unterkategorie optional) sowie Buchungen bearbeiten/löschen.
 
 import {
   listTransactions,
@@ -7,7 +7,7 @@ import {
   updateTransaction,
   deleteTransaction,
   listAccounts,
-  listGroups,
+  listCategoriesWithSubs,
 } from '../store.js';
 import {
   formatCents,
@@ -19,29 +19,25 @@ import {
 import { toast, confirmDialog, openModal } from '../ui.js';
 import { icon } from '../icons.js';
 
-// ---- kleine Helfer für die zweistufige Auswahl ------------------------------
+const NONE = '<option value="">– keine –</option>';
 
-function groupOptions(groups, selName) {
-  return groups
-    .map((g) => `<option value="${esc(g.name)}"${g.name === selName ? ' selected' : ''}>${esc(g.name)}</option>`)
-    .join('');
-}
-function subOptions(subs, selId) {
-  return subs
+function categoryOptions(cats, selId) {
+  return NONE + cats
     .map((c) => `<option value="${c.id}"${c.id === selId ? ' selected' : ''}>${esc(c.name)}</option>`)
     .join('');
 }
-function groupOfCategory(groups, categoryId) {
-  return groups.find((g) => g.subs.some((c) => c.id === categoryId));
+function subOptions(cat, selId) {
+  if (!cat || cat.subs.length === 0) return NONE;
+  return NONE + cat.subs
+    .map((s) => `<option value="${s.id}"${s.id === selId ? ' selected' : ''}>${esc(s.name)}</option>`)
+    .join('');
 }
 
-// ---- Ansicht ----------------------------------------------------------------
-
 export async function renderErfassen(ctx) {
-  const [transactions, accounts, groups] = await Promise.all([
+  const [transactions, accounts, cats] = await Promise.all([
     listTransactions(),
     listAccounts(),
-    listGroups(),
+    listCategoriesWithSubs(),
   ]);
 
   ctx.setHeader({ title: 'Erfassen' });
@@ -58,12 +54,8 @@ export async function renderErfassen(ctx) {
     return;
   }
 
-  const firstGroup = groups[0];
-  const accOptions = accounts
-    .map((a) => `<option value="${a.id}">${esc(a.name)}</option>`)
-    .join('');
-
-  const noCats = groups.length === 0;
+  const firstCat = cats[0];
+  const accOptions = accounts.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
 
   let html = `
     <section class="entry-card">
@@ -78,14 +70,14 @@ export async function renderErfassen(ctx) {
           <input class="field__input field__input--amount" name="amount" inputmode="decimal" placeholder="0,00" required />
         </label>
         <div class="cat-fields">
-          ${noCats ? `<p class="settings-note">Noch keine Kategorien. Lege sie im Reiter „Kategorien" an.</p>` : `
+          ${cats.length === 0 ? `<p class="settings-note">Noch keine Kategorien. Lege sie im Reiter „Kategorien" oder „Budget" an.</p>` : `
           <label class="field">
             <span class="field__label">Kategorie</span>
-            <select class="field__input field__input--big" name="group">${groupOptions(groups, firstGroup.name)}</select>
+            <select class="field__input field__input--big" name="categoryId">${categoryOptions(cats, firstCat.id)}</select>
           </label>
           <label class="field">
-            <span class="field__label">Unterkategorie</span>
-            <select class="field__input field__input--big" name="categoryId">${subOptions(firstGroup.subs, firstGroup.subs[0]?.id)}</select>
+            <span class="field__label">Unterkategorie (optional)</span>
+            <select class="field__input field__input--big" name="subcategoryId">${subOptions(firstCat, null)}</select>
           </label>`}
         </div>
         <div class="entry-row">
@@ -106,22 +98,25 @@ export async function renderErfassen(ctx) {
       </form>
     </section>`;
 
-  // Liste bereits erfasster Buchungen
-  html += renderList(transactions, accounts, groups);
+  html += renderList(transactions, accounts, cats);
 
   ctx.view.innerHTML = html;
 
-  wireEntryForm(ctx, ctx.view.querySelector('#entry-form'), groups);
-  wireList(ctx, transactions, accounts, groups);
+  wireEntryForm(ctx, ctx.view.querySelector('#entry-form'), cats);
+  ctx.view.querySelectorAll('[data-edit]').forEach((row) => {
+    row.addEventListener('click', () => {
+      const t = transactions.find((x) => x.id === row.dataset.edit);
+      if (t) openEditor(ctx, t, accounts, cats);
+    });
+  });
 }
 
-function renderList(transactions, accounts, groups) {
-  if (transactions.length === 0) {
-    return `<p class="list-title">Noch keine Buchungen erfasst.</p>`;
-  }
+function renderList(transactions, accounts, cats) {
+  if (transactions.length === 0) return `<p class="list-title">Noch keine Buchungen erfasst.</p>`;
   const accById = Object.fromEntries(accounts.map((a) => [a.id, a]));
-  const catById = {};
-  for (const g of groups) for (const c of g.subs) catById[c.id] = { ...c, group: g.name };
+  const catById = Object.fromEntries(cats.map((c) => [c.id, c]));
+  const subById = {};
+  for (const c of cats) for (const s of c.subs) subById[s.id] = s;
 
   const byDate = new Map();
   for (const t of transactions) {
@@ -136,17 +131,16 @@ function renderList(transactions, accounts, groups) {
     for (const t of rows) {
       const acc = accById[t.accountId];
       const cat = t.categoryId ? catById[t.categoryId] : null;
+      const sub = t.subcategoryId ? subById[t.subcategoryId] : null;
       const amountClass = t.amount < 0 ? 'is-negative' : 'is-positive';
       const title = t.payee || (t.amount >= 0 ? 'Einnahme' : 'Ausgabe');
-      const sub = [
-        cat ? `${cat.group} › ${cat.name}` : (t.amount >= 0 ? 'Einnahme' : 'Ohne Kategorie'),
-        acc ? acc.name : '',
-      ].filter(Boolean).join(' · ');
+      const catText = cat ? (sub ? `${cat.name} › ${sub.name}` : cat.name) : (t.amount >= 0 ? 'Einnahme' : 'Ohne Kategorie');
+      const subLine = [catText, acc ? acc.name : ''].filter(Boolean).join(' · ');
       html += `
         <div class="list-row" data-edit="${t.id}">
           <div class="list-row__main">
             <span class="list-row__title">${esc(title)}</span>
-            <span class="list-row__sub">${esc(sub)}</span>
+            <span class="list-row__sub">${esc(subLine)}</span>
           </div>
           <div class="list-row__value ${amountClass}">${formatCents(t.amount)}</div>
         </div>`;
@@ -156,34 +150,29 @@ function renderList(transactions, accounts, groups) {
   return html;
 }
 
-// ---- Formular-Logik ---------------------------------------------------------
-
-function wireCatSelects(container, groups) {
-  const groupSel = container.querySelector('select[name="group"]');
-  const subSel = container.querySelector('select[name="categoryId"]');
-  if (!groupSel || !subSel) return;
-  groupSel.addEventListener('change', () => {
-    const g = groups.find((x) => x.name === groupSel.value);
-    subSel.innerHTML = subOptions(g ? g.subs : [], g && g.subs[0] ? g.subs[0].id : null);
+function wireCatSelects(container, cats) {
+  const catSel = container.querySelector('select[name="categoryId"]');
+  const subSel = container.querySelector('select[name="subcategoryId"]');
+  if (!catSel || !subSel) return;
+  catSel.addEventListener('change', () => {
+    const c = cats.find((x) => x.id === catSel.value);
+    subSel.innerHTML = subOptions(c, null);
   });
 }
 
-function wireEntryForm(ctx, form, groups) {
+function wireEntryForm(ctx, form, cats) {
   if (!form) return;
   const kindInput = form.querySelector('input[name="kind"]');
   const catFields = form.querySelector('.cat-fields');
-
   form.querySelectorAll('.segmented__btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       form.querySelectorAll('.segmented__btn').forEach((b) => b.classList.remove('segmented__btn--active'));
       btn.classList.add('segmented__btn--active');
       kindInput.value = btn.dataset.kind;
-      // Bei Einnahmen keine Kategorie nötig.
       catFields.style.display = btn.dataset.kind === 'income' ? 'none' : '';
     });
   });
-
-  wireCatSelects(form, groups);
+  wireCatSelects(form, cats);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -196,29 +185,17 @@ function wireEntryForm(ctx, form, groups) {
       date: data.date || todayISO(),
       payee: data.payee || '',
       categoryId: data.kind === 'income' ? null : data.categoryId || null,
+      subcategoryId: data.kind === 'income' ? null : data.subcategoryId || null,
       amount: signed,
-      note: '',
     });
     toast('Gespeichert');
     renderErfassen(ctx);
   });
 }
 
-// ---- Bearbeiten -------------------------------------------------------------
-
-function wireList(ctx, transactions, accounts, groups) {
-  ctx.view.querySelectorAll('[data-edit]').forEach((row) => {
-    row.addEventListener('click', () => {
-      const t = transactions.find((x) => x.id === row.dataset.edit);
-      if (t) openEditor(ctx, t, accounts, groups);
-    });
-  });
-}
-
-function openEditor(ctx, t, accounts, groups) {
-  const isIncome = t.amount >= 0 && !t.categoryId;
+function openEditor(ctx, t, accounts, cats) {
   const kind = t.amount >= 0 ? 'income' : 'expense';
-  const curGroup = groupOfCategory(groups, t.categoryId);
+  const curCat = t.categoryId ? cats.find((c) => c.id === t.categoryId) : null;
   const accOptions = accounts
     .map((a) => `<option value="${a.id}"${a.id === t.accountId ? ' selected' : ''}>${esc(a.name)}</option>`)
     .join('');
@@ -238,11 +215,11 @@ function openEditor(ctx, t, accounts, groups) {
      <div class="cat-fields" ${kind === 'income' ? 'style="display:none"' : ''}>
        <label class="field">
          <span class="field__label">Kategorie</span>
-         <select class="field__input field__input--big" name="group">${groupOptions(groups, curGroup ? curGroup.name : (groups[0] && groups[0].name))}</select>
+         <select class="field__input field__input--big" name="categoryId">${categoryOptions(cats, t.categoryId)}</select>
        </label>
        <label class="field">
-         <span class="field__label">Unterkategorie</span>
-         <select class="field__input field__input--big" name="categoryId">${subOptions(curGroup ? curGroup.subs : (groups[0] ? groups[0].subs : []), t.categoryId)}</select>
+         <span class="field__label">Unterkategorie (optional)</span>
+         <select class="field__input field__input--big" name="subcategoryId">${subOptions(curCat, t.subcategoryId)}</select>
        </label>
      </div>
      <label class="field">
@@ -274,7 +251,7 @@ function openEditor(ctx, t, accounts, groups) {
       catFields.style.display = btn.dataset.kind === 'income' ? 'none' : '';
     });
   });
-  wireCatSelects(m.el, groups);
+  wireCatSelects(m.el, cats);
 
   m.el.querySelector('[data-action="delete"]').addEventListener('click', async () => {
     const ok = await confirmDialog('Buchung löschen?', 'Diese Buchung wird entfernt.');
@@ -296,6 +273,7 @@ function openEditor(ctx, t, accounts, groups) {
       date: data.date || todayISO(),
       payee: (data.payee || '').trim(),
       categoryId: data.kind === 'income' ? null : data.categoryId || null,
+      subcategoryId: data.kind === 'income' ? null : data.subcategoryId || null,
       amount: signed,
     });
     close();

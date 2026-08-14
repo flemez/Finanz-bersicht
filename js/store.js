@@ -1,11 +1,12 @@
-// Geschäftslogik: Konten, Kategorien, Buchungen und die
-// Umschlag-Budgetierung ("Envelope Budgeting", inspiriert von Actual Budget).
+// Geschäftslogik: Konten, Kategorien (mit optionalen Unterkategorien),
+// Buchungen und die Umschlag-Budgetierung.
 //
-// Grundidee des Umschlag-Budgets:
-//  - Einnahmen (positive Buchung ohne Kategorie auf einem Budget-Konto)
-//    landen im Topf "Verfügbar zum Zuweisen".
-//  - Von dort verteilst du Geld pro Monat auf Kategorien (Umschläge).
-//  - Jede Kategorie hat ein "Verfügbar", das von Monat zu Monat übertragen wird.
+// Modell:
+//  - Kategorie (categories) = die Budget-Einheit. Hier wird Geld zugewiesen,
+//    und die Übersicht zeigt pro Kategorie budgetiert / ausgegeben / verfügbar.
+//  - Unterkategorie (subcategories) = optionales Detail unter einer Kategorie.
+//  - Eine Buchung wird einer Kategorie zugeordnet; eine Unterkategorie ist
+//    optional.
 
 import * as db from './db.js';
 import { uid, currentMonth, todayISO, shiftMonth } from './format.js';
@@ -34,7 +35,6 @@ export async function updateAccount(account) {
 }
 
 export async function deleteAccount(id) {
-  // Zugehörige Buchungen mitlöschen.
   const txns = await db.getAll('transactions');
   for (const t of txns.filter((t) => t.accountId === id)) {
     await db.remove('transactions', t.id);
@@ -49,37 +49,41 @@ export function accountBalance(accountId, transactions) {
     .reduce((sum, t) => sum + (t.amount || 0), 0);
 }
 
-// ---- Kategorien (Umschläge) -------------------------------------------------
+// ---- Kategorien (Budget-Einheit) --------------------------------------------
 
 export async function listCategories() {
   const rows = await db.getAll('categories');
-  return rows.sort(
-    (a, b) =>
-      (a.group || '').localeCompare(b.group || '') ||
-      (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
-  );
+  return rows.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
 
-export async function addCategory({ name, group = 'Allgemein' }) {
-  const category = {
+export async function addCategory({ name }) {
+  const cat = {
     id: uid(),
     name: String(name).trim(),
-    group: String(group).trim() || 'Allgemein',
     sortOrder: Date.now(),
     createdAt: new Date().toISOString(),
   };
-  return db.put('categories', category);
+  return db.put('categories', cat);
 }
 
-export async function updateCategory(category) {
-  return db.put('categories', category);
+export async function updateCategory(cat) {
+  return db.put('categories', cat);
 }
 
 export async function deleteCategory(id) {
-  // Buchungen behalten, aber Kategorie entfernen.
+  // Unterkategorien der Kategorie entfernen.
+  const subs = await db.getAll('subcategories');
+  for (const s of subs.filter((s) => s.categoryId === id)) {
+    await db.remove('subcategories', s.id);
+  }
+  // Buchungen behalten, aber Kategorie/Unterkategorie lösen.
   const txns = await db.getAll('transactions');
   for (const t of txns.filter((t) => t.categoryId === id)) {
-    await db.put('transactions', { ...t, categoryId: null });
+    await db.put('transactions', { ...t, categoryId: null, subcategoryId: null });
+  }
+  const recs = await db.getAll('recurring');
+  for (const r of recs.filter((r) => r.categoryId === id)) {
+    await db.put('recurring', { ...r, categoryId: null, subcategoryId: null });
   }
   const budgets = await db.getAll('budgets');
   for (const b of budgets.filter((b) => b.categoryId === id)) {
@@ -88,49 +92,47 @@ export async function deleteCategory(id) {
   return db.remove('categories', id);
 }
 
-// ---- Kategorien (oben) und Unterkategorien -----------------------------------
-//
-// Struktur: Eine "Kategorie" ist die Gruppe (category.group), darunter liegen
-// die "Unterkategorien" (die einzelnen category-Einträge). Buchungen werden
-// immer einer Unterkategorie zugeordnet.
+// ---- Unterkategorien (optional) ---------------------------------------------
 
-/** Liefert Kategorien mit ihren Unterkategorien: [{ name, subs:[cat,...] }]. */
-export async function listGroups() {
-  const cats = await listCategories();
-  const map = new Map();
-  for (const c of cats) {
-    const g = c.group || 'Allgemein';
-    if (!map.has(g)) map.set(g, []);
-    map.get(g).push(c);
-  }
-  return [...map.entries()]
-    .map(([name, subs]) => ({ name, subs }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+export async function listSubcategories() {
+  const rows = await db.getAll('subcategories');
+  return rows.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
 
-/** Neue Kategorie mit erster Unterkategorie anlegen. */
-export async function addGroup(groupName, firstSubName) {
-  const group = String(groupName).trim() || 'Allgemein';
-  const sub = String(firstSubName).trim() || 'Allgemein';
-  return addCategory({ name: sub, group });
+export async function addSubcategory({ categoryId, name }) {
+  const sub = {
+    id: uid(),
+    categoryId,
+    name: String(name).trim(),
+    sortOrder: Date.now(),
+    createdAt: new Date().toISOString(),
+  };
+  return db.put('subcategories', sub);
 }
 
-/** Kategorie (Gruppe) umbenennen – verschiebt alle Unterkategorien mit. */
-export async function renameGroup(oldName, newName) {
-  const name = String(newName).trim();
-  if (!name) return;
-  const cats = await listCategories();
-  for (const c of cats.filter((c) => (c.group || 'Allgemein') === oldName)) {
-    await updateCategory({ ...c, group: name });
-  }
+export async function updateSubcategory(sub) {
+  return db.put('subcategories', sub);
 }
 
-/** Ganze Kategorie inkl. aller Unterkategorien löschen. */
-export async function deleteGroup(name) {
-  const cats = await listCategories();
-  for (const c of cats.filter((c) => (c.group || 'Allgemein') === name)) {
-    await deleteCategory(c.id);
+export async function deleteSubcategory(id) {
+  const txns = await db.getAll('transactions');
+  for (const t of txns.filter((t) => t.subcategoryId === id)) {
+    await db.put('transactions', { ...t, subcategoryId: null });
   }
+  const recs = await db.getAll('recurring');
+  for (const r of recs.filter((r) => r.subcategoryId === id)) {
+    await db.put('recurring', { ...r, subcategoryId: null });
+  }
+  return db.remove('subcategories', id);
+}
+
+/** Kategorien mit ihren Unterkategorien: [{ ...cat, subs:[...] }]. */
+export async function listCategoriesWithSubs() {
+  const [cats, subs] = await Promise.all([listCategories(), listSubcategories()]);
+  return cats.map((c) => ({
+    ...c,
+    subs: subs.filter((s) => s.categoryId === c.id),
+  }));
 }
 
 // ---- Buchungen --------------------------------------------------------------
@@ -149,6 +151,7 @@ export async function addTransaction({
   date,
   payee = '',
   categoryId = null,
+  subcategoryId = null,
   amount,
   note = '',
 }) {
@@ -158,6 +161,7 @@ export async function addTransaction({
     date,
     payee: String(payee).trim(),
     categoryId: categoryId || null,
+    subcategoryId: subcategoryId || null,
     amount: amount | 0,
     note: String(note).trim(),
     createdAt: new Date().toISOString(),
@@ -173,7 +177,7 @@ export async function deleteTransaction(id) {
   return db.remove('transactions', id);
 }
 
-// ---- Budget (Umschlag-Logik) ------------------------------------------------
+// ---- Budget (Umschlag-Logik, pro Kategorie) ---------------------------------
 
 function budgetId(month, categoryId) {
   return `${month}:${categoryId}`;
@@ -194,10 +198,8 @@ export async function setBudgeted(month, categoryId, cents) {
 }
 
 /**
- * Vollständige Budget-Übersicht für einen Monat berechnen.
- * Liefert pro Kategorie: budgeted, activity (Ausgaben/Einnahmen des Monats),
- * available (übertragener Umschlag-Stand) – und den Gesamttopf
- * "Verfügbar zum Zuweisen".
+ * Budget-Übersicht für einen Monat (pro Kategorie): budgeted, activity,
+ * available (rollierend) und "Verfügbar zum Zuweisen".
  */
 export async function computeBudget(month) {
   const [accounts, categories, transactions, budgets] = await Promise.all([
@@ -207,9 +209,7 @@ export async function computeBudget(month) {
     db.getAll('budgets'),
   ]);
 
-  const onBudgetIds = new Set(
-    accounts.filter((a) => a.onBudget).map((a) => a.id)
-  );
+  const onBudgetIds = new Set(accounts.filter((a) => a.onBudget).map((a) => a.id));
 
   const monthActivity = (categoryId, m) =>
     transactions
@@ -226,7 +226,6 @@ export async function computeBudget(month) {
     return row ? row.budgeted : 0;
   };
 
-  // Alle relevanten Monate bis einschließlich des gewählten sammeln.
   const months = new Set([month]);
   for (const b of budgets) if (b.month <= month) months.add(b.month);
   for (const t of transactions) {
@@ -236,7 +235,6 @@ export async function computeBudget(month) {
   const sortedMonths = [...months].sort();
 
   const rows = categories.map((cat) => {
-    // Verfügbar = kumuliert (budgetiert + Aktivität) über alle Monate <= month.
     let available = 0;
     for (const m of sortedMonths) {
       available += budgetedFor(cat.id, m) + monthActivity(cat.id, m);
@@ -249,17 +247,10 @@ export async function computeBudget(month) {
     };
   });
 
-  // "Verfügbar zum Zuweisen" = Einnahmen (bis Monat) − insgesamt budgetiert (bis Monat).
   let incomeToDate = 0;
   for (const t of transactions) {
     const m = (t.date || '').slice(0, 7);
-    if (
-      m &&
-      m <= month &&
-      !t.categoryId &&
-      (t.amount || 0) > 0 &&
-      onBudgetIds.has(t.accountId)
-    ) {
+    if (m && m <= month && !t.categoryId && (t.amount || 0) > 0 && onBudgetIds.has(t.accountId)) {
       incomeToDate += t.amount;
     }
   }
@@ -278,12 +269,6 @@ export async function computeBudget(month) {
 }
 
 // ---- Fixkosten / wiederkehrende Buchungen -----------------------------------
-//
-// Da die App lokal ohne Server läuft, werden fällige Fixkosten beim Öffnen
-// der App automatisch nachgebucht (siehe postDueRecurring).
-//
-// Ein Betrag wird pro Intervall angegeben (z. B. 1.200 € jährlich) und
-// anteilig pro Monat gebucht ("runtergebrochen auf den Monat", z. B. 100 €).
 
 export const INTERVALS = {
   monthly: { label: 'Monatlich', months: 1 },
@@ -304,8 +289,7 @@ export function monthlyCents(rec) {
 export async function listRecurring() {
   const rows = await db.getAll('recurring');
   return rows.sort(
-    (a, b) => (a.dayOfMonth ?? 1) - (b.dayOfMonth ?? 1) ||
-      (a.name || '').localeCompare(b.name || '')
+    (a, b) => (a.dayOfMonth ?? 1) - (b.dayOfMonth ?? 1) || (a.name || '').localeCompare(b.name || '')
   );
 }
 
@@ -315,6 +299,7 @@ export async function addRecurring({
   amount,
   interval = 'monthly',
   categoryId = null,
+  subcategoryId = null,
   accountId,
   dayOfMonth = 1,
 }) {
@@ -325,6 +310,7 @@ export async function addRecurring({
     amount: Math.abs(amount | 0),
     interval: INTERVALS[interval] ? interval : 'monthly',
     categoryId: type === 'income' ? null : categoryId || null,
+    subcategoryId: type === 'income' ? null : subcategoryId || null,
     accountId,
     dayOfMonth: Math.min(28, Math.max(1, dayOfMonth | 0)),
     active: true,
@@ -343,12 +329,6 @@ export async function deleteRecurring(id) {
   return db.remove('recurring', id);
 }
 
-/**
- * Alle fälligen Fixkosten automatisch als Buchung nachtragen.
- * Wird beim App-Start aufgerufen. Bucht jeden ausstehenden Monat vom
- * Startmonat bis zum aktuellen Monat (aktueller Monat erst ab dem
- * eingestellten Tag). Liefert die Anzahl neu erstellter Buchungen.
- */
 export async function postDueRecurring() {
   const recs = await db.getAll('recurring');
   const curMonth = currentMonth();
@@ -360,15 +340,12 @@ export async function postDueRecurring() {
     let month = rec.lastPosted ? shiftMonth(rec.lastPosted, 1) : rec.startMonth || curMonth;
     let changed = false;
 
-    // Sicherheitsgrenze gegen Endlosschleifen.
     let guard = 0;
     while (month <= curMonth && guard++ < 600) {
       const isCurrent = month === curMonth;
-      // Aktuellen Monat nur buchen, wenn der Fälligkeitstag erreicht ist.
       if (isCurrent && curDay < rec.dayOfMonth) break;
 
       const day = String(Math.min(28, rec.dayOfMonth)).padStart(2, '0');
-      // Auf den Monat heruntergerechneter Anteil.
       const perMonth = monthlyCents(rec);
       const label = (INTERVALS[rec.interval] || INTERVALS.monthly).label.toLowerCase();
       await addTransaction({
@@ -376,9 +353,10 @@ export async function postDueRecurring() {
         date: `${month}-${day}`,
         payee: rec.name,
         categoryId: rec.type === 'income' ? null : rec.categoryId || null,
+        subcategoryId: rec.type === 'income' ? null : rec.subcategoryId || null,
         amount: rec.type === 'income' ? perMonth : -perMonth,
         note:
-          (rec.interval && rec.interval !== 'monthly')
+          rec.interval && rec.interval !== 'monthly'
             ? `Fixkosten anteilig (${label})`
             : 'Automatische Fixkosten-Buchung',
       });
@@ -393,6 +371,97 @@ export async function postDueRecurring() {
   return created;
 }
 
+// ---- Migration alter Daten --------------------------------------------------
+//
+// Frühere Versionen speicherten Kategorien flach mit einem "group"-Feld
+// (group = Kategorie, category = Unterkategorie). Diese Funktion wandelt das
+// einmalig in das neue Modell (Kategorie + optionale Unterkategorie) um.
+
+export async function migrateModel() {
+  const cats = await db.getAll('categories');
+  const needs = cats.some((c) => c && Object.prototype.hasOwnProperty.call(c, 'group'));
+  if (!needs) return false;
+
+  const oldLeaves = cats;
+  const [oldTx, oldBudgets, oldRecurring] = await Promise.all([
+    db.getAll('transactions'),
+    db.getAll('budgets'),
+    db.getAll('recurring'),
+  ]);
+
+  // Kategorien (oben) aus den vorkommenden Gruppen bilden – Reihenfolge erhalten.
+  const groupNames = [];
+  for (const l of oldLeaves) {
+    const g = l.group || 'Allgemein';
+    if (!groupNames.includes(g)) groupNames.push(g);
+  }
+  const topByGroup = new Map();
+  const now = new Date().toISOString();
+  const topCats = groupNames.map((g, i) => {
+    const id = uid();
+    topByGroup.set(g, id);
+    return { id, name: g, sortOrder: i, createdAt: now, updatedAt: now };
+  });
+
+  // Alte Blatt-Kategorien werden Unterkategorien (ID bleibt erhalten).
+  const subs = oldLeaves.map((l, i) => ({
+    id: l.id,
+    categoryId: topByGroup.get(l.group || 'Allgemein'),
+    name: l.name,
+    sortOrder: l.sortOrder ?? i,
+    createdAt: l.createdAt || now,
+    updatedAt: now,
+  }));
+  const leafToTop = new Map(oldLeaves.map((l) => [l.id, topByGroup.get(l.group || 'Allgemein')]));
+
+  // Kategorien-Store neu aufbauen.
+  await db.clearStore('categories');
+  for (const c of topCats) await db.putRaw('categories', c);
+  for (const s of subs) await db.putRaw('subcategories', s);
+
+  // Buchungen umschreiben: alte categoryId (Blatt) -> categoryId (oben) + subcategoryId.
+  for (const t of oldTx) {
+    if (t.categoryId && leafToTop.has(t.categoryId)) {
+      await db.putRaw('transactions', {
+        ...t,
+        categoryId: leafToTop.get(t.categoryId),
+        subcategoryId: t.categoryId,
+      });
+    } else if (t.subcategoryId === undefined) {
+      await db.putRaw('transactions', { ...t, subcategoryId: null });
+    }
+  }
+
+  // Fixkosten umschreiben.
+  for (const r of oldRecurring) {
+    if (r.categoryId && leafToTop.has(r.categoryId)) {
+      await db.putRaw('recurring', {
+        ...r,
+        categoryId: leafToTop.get(r.categoryId),
+        subcategoryId: r.categoryId,
+      });
+    } else if (r.subcategoryId === undefined) {
+      await db.putRaw('recurring', { ...r, subcategoryId: null });
+    }
+  }
+
+  // Budgets auf Kategorie-Ebene zusammenfassen.
+  const agg = new Map();
+  for (const b of oldBudgets) {
+    const top = leafToTop.get(b.categoryId);
+    if (!top) continue;
+    const key = `${b.month}:${top}`;
+    agg.set(key, (agg.get(key) || 0) + (b.budgeted || 0));
+  }
+  await db.clearStore('budgets');
+  for (const [key, cents] of agg) {
+    const [month, topId] = key.split(':');
+    await db.putRaw('budgets', { id: key, month, categoryId: topId, budgeted: cents });
+  }
+
+  return true;
+}
+
 // ---- Ersteinrichtung --------------------------------------------------------
 
 /** Beim allerersten Start sinnvolle Beispieldaten anlegen. */
@@ -405,14 +474,13 @@ export async function seedIfEmpty() {
   await addAccount({ name: 'Bargeld', type: 'bargeld', onBudget: true });
 
   const defaults = [
-    { group: 'Fixkosten', names: ['Miete', 'Strom', 'Internet & Handy', 'Versicherungen'] },
-    { group: 'Alltag', names: ['Lebensmittel', 'Restaurant', 'Mobilität', 'Freizeit'] },
-    { group: 'Sparziele', names: ['Notgroschen', 'Urlaub'] },
+    { name: 'Fixkosten', subs: ['Miete', 'Strom', 'Internet & Handy', 'Versicherungen'] },
+    { name: 'Alltag', subs: ['Lebensmittel', 'Restaurant', 'Mobilität', 'Freizeit'] },
+    { name: 'Sparziele', subs: ['Notgroschen', 'Urlaub'] },
   ];
-  for (const grp of defaults) {
-    for (const name of grp.names) {
-      await addCategory({ name, group: grp.group });
-    }
+  for (const d of defaults) {
+    const cat = await addCategory({ name: d.name });
+    for (const s of d.subs) await addSubcategory({ categoryId: cat.id, name: s });
   }
   return true;
 }

@@ -1,5 +1,5 @@
 // Fixkosten-Ansicht: wiederkehrende Buchungen festlegen, die jeden Monat
-// automatisch eingetragen werden.
+// automatisch (anteilig) einer Kategorie gebucht werden.
 
 import {
   listRecurring,
@@ -8,7 +8,7 @@ import {
   deleteRecurring,
   postDueRecurring,
   listAccounts,
-  listCategories,
+  listCategoriesWithSubs,
   INTERVALS,
   monthlyCents,
 } from '../store.js';
@@ -16,21 +16,30 @@ import { formatCents, esc, parseAmountToCents } from '../format.js';
 import { openModal, toast, confirmDialog } from '../ui.js';
 import { icon } from '../icons.js';
 
+const NONE_CAT = '<option value="">– Noch nicht zuordnen –</option>';
+const NONE_SUB = '<option value="">– keine –</option>';
+
+function categoryOptions(cats, sel) {
+  return NONE_CAT + cats.map((c) => `<option value="${c.id}"${c.id === sel ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+}
+function subOptionsFor(cat, sel) {
+  if (!cat || cat.subs.length === 0) return NONE_SUB;
+  return NONE_SUB + cat.subs.map((s) => `<option value="${s.id}"${s.id === sel ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+}
+
 export async function renderRecurring(ctx) {
-  const [recs, accounts, categories] = await Promise.all([
+  const [recs, accounts, cats] = await Promise.all([
     listRecurring(),
     listAccounts(),
-    listCategories(),
+    listCategoriesWithSubs(),
   ]);
   const accById = Object.fromEntries(accounts.map((a) => [a.id, a]));
-  const catById = Object.fromEntries(categories.map((c) => [c.id, c]));
+  const catById = Object.fromEntries(cats.map((c) => [c.id, c]));
+  const subById = {};
+  for (const c of cats) for (const s of c.subs) subById[s.id] = s;
 
-  ctx.setHeader({
-    title: 'Fixkosten',
-    back: () => ctx.navigate('more'),
-  });
+  ctx.setHeader({ title: 'Fixkosten', back: () => ctx.navigate('more') });
 
-  // Monatlicher Saldo = Summe der auf den Monat heruntergerechneten Beträge.
   const monthly = recs
     .filter((r) => r.active)
     .reduce((s, r) => s + (r.type === 'income' ? monthlyCents(r) : -monthlyCents(r)), 0);
@@ -54,22 +63,24 @@ export async function renderRecurring(ctx) {
     for (const r of recs) {
       const acc = accById[r.accountId];
       const cat = r.categoryId ? catById[r.categoryId] : null;
+      const sub = r.subcategoryId ? subById[r.subcategoryId] : null;
       const perMonth = monthlyCents(r);
       const signedMonthly = r.type === 'income' ? perMonth : -perMonth;
       const amountClass = signedMonthly < 0 ? 'is-negative' : 'is-positive';
       const intervalLabel = (INTERVALS[r.interval] || INTERVALS.monthly).label;
       const isMonthly = !r.interval || r.interval === 'monthly';
-      const sub = [
+      const catText = cat ? (sub ? `${cat.name} › ${sub.name}` : cat.name) : (r.type === 'income' ? 'Einnahme' : 'Ohne Kategorie');
+      const subLine = [
         isMonthly ? 'monatlich' : `${intervalLabel} (${formatCents(r.amount)})`,
         `am ${r.dayOfMonth}.`,
-        cat ? cat.name : (r.type === 'income' ? 'Einnahme' : 'Ohne Kategorie'),
+        catText,
         acc ? acc.name : '',
       ].filter(Boolean).join(' · ');
       html += `
         <div class="list-row" data-edit="${r.id}">
           <div class="list-row__main">
             <span class="list-row__title">${esc(r.name)}${r.active ? '' : ' <span class="tag-muted">(pausiert)</span>'}</span>
-            <span class="list-row__sub">${esc(sub)}</span>
+            <span class="list-row__sub">${esc(subLine)}</span>
           </div>
           <div class="list-row__value ${amountClass}">${formatCents(signedMonthly)}<span class="value-unit">/Monat</span></div>
           <button class="icon-btn list-row__del" data-del="${r.id}" aria-label="Fixkosten löschen">${icon.trash}</button>
@@ -82,17 +93,12 @@ export async function renderRecurring(ctx) {
 
   ctx.view.innerHTML = html;
 
-  ctx.view.querySelector('#add-recurring').addEventListener('click', () =>
-    openRecurringModal(ctx, null, accounts, categories)
-  );
+  ctx.view.querySelector('#add-recurring').addEventListener('click', () => openRecurringModal(ctx, null, accounts, cats));
 
   ctx.view.querySelectorAll('[data-del]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const ok = await confirmDialog(
-        'Fixkosten löschen?',
-        'Die Regel wird entfernt. Bereits gebuchte Beträge bleiben erhalten.'
-      );
+      const ok = await confirmDialog('Fixkosten löschen?', 'Die Regel wird entfernt. Bereits gebuchte Beträge bleiben erhalten.');
       if (!ok) return;
       await deleteRecurring(btn.dataset.del);
       toast('Fixkosten gelöscht');
@@ -103,30 +109,12 @@ export async function renderRecurring(ctx) {
   ctx.view.querySelectorAll('[data-edit]').forEach((row) => {
     row.addEventListener('click', () => {
       const rec = recs.find((r) => r.id === row.dataset.edit);
-      if (rec) openRecurringModal(ctx, rec, accounts, categories);
+      if (rec) openRecurringModal(ctx, rec, accounts, cats);
     });
   });
 }
 
-function buildCategoryOptions(categories, selectedId) {
-  const groups = new Map();
-  for (const c of categories) {
-    const g = c.group || 'Allgemein';
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(c);
-  }
-  let out = '<option value="">– Noch nicht zuordnen –</option>';
-  for (const [g, cs] of groups) {
-    out += `<optgroup label="${esc(g)}">`;
-    out += cs
-      .map((c) => `<option value="${c.id}"${c.id === selectedId ? ' selected' : ''}>${esc(c.name)}</option>`)
-      .join('');
-    out += '</optgroup>';
-  }
-  return out;
-}
-
-async function openRecurringModal(ctx, existing, accounts, categories) {
+async function openRecurringModal(ctx, existing, accounts, cats) {
   if (accounts.length === 0) {
     toast('Bitte zuerst ein Konto anlegen');
     ctx.navigate('accounts');
@@ -135,11 +123,11 @@ async function openRecurringModal(ctx, existing, accounts, categories) {
   const isEdit = !!existing;
   const r = existing || {};
   const type = r.type || 'expense';
+  const curCat = r.categoryId ? cats.find((c) => c.id === r.categoryId) : null;
 
   const accOptions = accounts
     .map((a) => `<option value="${a.id}"${a.id === r.accountId ? ' selected' : ''}>${esc(a.name)}</option>`)
     .join('');
-  const catOptions = buildCategoryOptions(categories, r.categoryId);
   const amountValue = r.amount ? (r.amount / 100).toString().replace('.', ',') : '';
   const curInterval = r.interval || 'monthly';
   const intervalOptions = Object.entries(INTERVALS)
@@ -159,26 +147,30 @@ async function openRecurringModal(ctx, existing, accounts, categories) {
      </label>
      <label class="field">
        <span class="field__label">Betrag (pro Zeitraum)</span>
-       <input class="field__input field__input--amount" name="amount" inputmode="decimal"
-              placeholder="0,00" value="${amountValue}" required />
+       <input class="field__input field__input--amount" name="amount" inputmode="decimal" placeholder="0,00" value="${amountValue}" required />
      </label>
      <label class="field">
        <span class="field__label">Intervall</span>
        <select class="field__input" name="interval">${intervalOptions}</select>
        <span class="field__hint" id="rec-preview"></span>
      </label>
-     <label class="field field--category" ${type === 'income' ? 'style="display:none"' : ''}>
-       <span class="field__label">Wohin einsortieren? (Kategorie)</span>
-       <select class="field__input field__input--big" name="categoryId">${catOptions}</select>
-     </label>
+     <div class="rec-cat-fields" ${type === 'income' ? 'style="display:none"' : ''}>
+       <label class="field">
+         <span class="field__label">Kategorie</span>
+         <select class="field__input field__input--big" name="categoryId">${categoryOptions(cats, r.categoryId)}</select>
+       </label>
+       <label class="field">
+         <span class="field__label">Unterkategorie (optional)</span>
+         <select class="field__input field__input--big" name="subcategoryId">${subOptionsFor(curCat, r.subcategoryId)}</select>
+       </label>
+     </div>
      <label class="field">
        <span class="field__label">Konto</span>
        <select class="field__input" name="accountId">${accOptions}</select>
      </label>
      <label class="field">
        <span class="field__label">Tag im Monat (1–28)</span>
-       <input class="field__input" name="dayOfMonth" type="number" min="1" max="28"
-              value="${r.dayOfMonth || 1}" />
+       <input class="field__input" name="dayOfMonth" type="number" min="1" max="28" value="${r.dayOfMonth || 1}" />
      </label>
      ${isEdit ? `<label class="field field--check">
        <input type="checkbox" name="active" ${r.active ? 'checked' : ''} />
@@ -191,14 +183,22 @@ async function openRecurringModal(ctx, existing, accounts, categories) {
   );
 
   const kindInput = m.el.querySelector('input[name="kind"]');
-  const catField = m.el.querySelector('.field--category');
+  const catFields = m.el.querySelector('.rec-cat-fields');
   m.el.querySelectorAll('.segmented__btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       m.el.querySelectorAll('.segmented__btn').forEach((b) => b.classList.remove('segmented__btn--active'));
       btn.classList.add('segmented__btn--active');
       kindInput.value = btn.dataset.kind;
-      catField.style.display = btn.dataset.kind === 'income' ? 'none' : '';
+      catFields.style.display = btn.dataset.kind === 'income' ? 'none' : '';
     });
+  });
+
+  // Unterkategorie an gewählte Kategorie koppeln.
+  const catSel = m.el.querySelector('select[name="categoryId"]');
+  const subSel = m.el.querySelector('select[name="subcategoryId"]');
+  catSel.addEventListener('change', () => {
+    const c = cats.find((x) => x.id === catSel.value);
+    subSel.innerHTML = subOptionsFor(c, null);
   });
 
   // Live-Vorschau: „= X €/Monat".
@@ -228,7 +228,6 @@ async function openRecurringModal(ctx, existing, accounts, categories) {
     const cents = parseAmountToCents(data.amount);
     if (cents == null || cents === 0) return toast('Bitte einen gültigen Betrag eingeben');
     const day = Math.min(28, Math.max(1, parseInt(data.dayOfMonth, 10) || 1));
-
     const interval = INTERVALS[data.interval] ? data.interval : 'monthly';
 
     if (isEdit) {
@@ -239,6 +238,7 @@ async function openRecurringModal(ctx, existing, accounts, categories) {
         amount: Math.abs(cents),
         interval,
         categoryId: data.kind === 'income' ? null : data.categoryId || null,
+        subcategoryId: data.kind === 'income' ? null : data.subcategoryId || null,
         accountId: data.accountId,
         dayOfMonth: day,
         active: data.active === 'on',
@@ -251,10 +251,10 @@ async function openRecurringModal(ctx, existing, accounts, categories) {
         amount: Math.abs(cents),
         interval,
         categoryId: data.categoryId || null,
+        subcategoryId: data.subcategoryId || null,
         accountId: data.accountId,
         dayOfMonth: day,
       });
-      // Falls der Fälligkeitstag diesen Monat schon erreicht ist, direkt buchen.
       const created = await postDueRecurring();
       toast(created > 0 ? 'Fixkosten angelegt & für diesen Monat gebucht' : 'Fixkosten angelegt');
     }

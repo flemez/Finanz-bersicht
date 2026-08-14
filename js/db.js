@@ -5,14 +5,19 @@
 //   accounts      { id, name, type, onBudget, sortOrder, createdAt }
 //   categories    { id, name, group, sortOrder, createdAt }
 //   transactions  { id, accountId, date, payee, categoryId, amount, note, createdAt }
+//   categories    { id, name, sortOrder, createdAt }            (Budget-Einheit)
+//   subcategories { id, categoryId, name, sortOrder, createdAt } (optional)
 //   budgets       { id: "YYYY-MM:categoryId", month, categoryId, budgeted }
-//   recurring     { id, name, type, amount, categoryId, accountId, dayOfMonth,
-//                   active, startMonth, lastPosted, createdAt }
+//   recurring     { id, name, type, amount, interval, categoryId, subcategoryId,
+//                   accountId, dayOfMonth, active, startMonth, lastPosted, createdAt }
 //
 // Beträge (amount, budgeted) sind ganze Cent (Integer).
 
 const DB_NAME = 'finanzuebersicht';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
+
+// Alle Objektspeicher (für Backup, Merge, Reset).
+const STORES = ['accounts', 'categories', 'subcategories', 'transactions', 'budgets', 'recurring'];
 
 let dbPromise = null;
 
@@ -40,6 +45,10 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains('recurring')) {
         db.createObjectStore('recurring', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('subcategories')) {
+        const s = db.createObjectStore('subcategories', { keyPath: 'id' });
+        s.createIndex('by_category', 'categoryId');
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -90,34 +99,29 @@ export async function remove(store, id) {
   return reqToPromise(os.delete(id));
 }
 
-export async function clearAll() {
+/** Einen einzelnen Objektspeicher leeren. */
+export async function clearStore(name) {
   const db = await openDB();
-  await Promise.all(
-    ['accounts', 'categories', 'transactions', 'budgets', 'recurring'].map(
-      (name) =>
-        new Promise((resolve, reject) => {
-          const r = db.transaction(name, 'readwrite').objectStore(name).clear();
-          r.onsuccess = () => resolve();
-          r.onerror = () => reject(r.error);
-        })
-    )
-  );
+  return new Promise((resolve, reject) => {
+    const r = db.transaction(name, 'readwrite').objectStore(name).clear();
+    r.onsuccess = () => resolve();
+    r.onerror = () => reject(r.error);
+  });
+}
+
+export async function clearAll() {
+  for (const name of STORES) await clearStore(name);
 }
 
 /** Kompletten Datenbestand als einfaches Objekt exportieren (für Backups). */
 export async function exportAll() {
-  const [accounts, categories, transactions, budgets, recurring] = await Promise.all([
-    getAll('accounts'),
-    getAll('categories'),
-    getAll('transactions'),
-    getAll('budgets'),
-    getAll('recurring'),
-  ]);
+  const data = {};
+  for (const name of STORES) data[name] = await getAll(name);
   return {
     app: 'finanzuebersicht',
     version: DB_VERSION,
     exportedAt: new Date().toISOString(),
-    data: { accounts, categories, transactions, budgets, recurring },
+    data,
   };
 }
 
@@ -125,8 +129,7 @@ export async function exportAll() {
 export async function importAll(payload) {
   const data = payload && payload.data ? payload.data : {};
   await clearAll();
-  const stores = ['accounts', 'categories', 'transactions', 'budgets', 'recurring'];
-  for (const store of stores) {
+  for (const store of STORES) {
     const rows = Array.isArray(data[store]) ? data[store] : [];
     for (const row of rows) {
       await put(store, row);
@@ -143,10 +146,9 @@ export async function importAll(payload) {
  */
 export async function mergeImport(payload) {
   const data = payload && payload.data ? payload.data : {};
-  const stores = ['accounts', 'categories', 'transactions', 'budgets', 'recurring'];
   const stats = { added: 0, updated: 0 };
 
-  for (const store of stores) {
+  for (const store of STORES) {
     const rows = Array.isArray(data[store]) ? data[store] : [];
     if (rows.length === 0) continue;
     const localRows = await getAll(store);
