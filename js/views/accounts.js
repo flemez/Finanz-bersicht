@@ -32,6 +32,7 @@ export async function renderAccounts(ctx) {
 
   ctx.setHeader({
     title: 'Konten',
+    back: () => ctx.navigate('more'),
     action: {
       label: '+ Konto',
       aria: 'Konto hinzufügen',

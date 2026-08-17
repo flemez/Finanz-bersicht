@@ -38,7 +38,7 @@ export async function renderRecurring(ctx) {
   const subById = {};
   for (const c of cats) for (const s of c.subs) subById[s.id] = s;
 
-  ctx.setHeader({ title: 'Fixkosten', back: () => ctx.navigate('more') });
+  ctx.setHeader({ title: 'Fixkosten' });
 
   const monthly = recs
     .filter((r) => r.active)

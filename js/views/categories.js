@@ -19,7 +19,7 @@ import { icon } from '../icons.js';
 export async function renderCategories(ctx) {
   const cats = await listCategoriesWithSubs();
 
-  ctx.setHeader({ title: 'Kategorien' });
+  ctx.setHeader({ title: 'Kategorien', back: () => ctx.navigate('more') });
 
   let html = '';
 

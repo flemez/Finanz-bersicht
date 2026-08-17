@@ -17,13 +17,14 @@ export async function renderBudget(ctx) {
   const data = await computeBudget(activeMonth);
 
   ctx.setHeader({
-    title: 'Budget',
+    title: 'Aufteilung',
     sub: `
       <div class="monthnav">
         <button class="icon-btn" data-month="prev" aria-label="Vorheriger Monat">‹</button>
         <span class="monthnav__label">${esc(formatMonth(activeMonth))}</span>
         <button class="icon-btn" data-month="next" aria-label="Nächster Monat">›</button>
       </div>`,
+    action: { label: '+', aria: 'Kategorie hinzufügen', onClick: () => openCategoryModal(ctx) },
   });
 
   const toAssignClass =
@@ -57,10 +58,8 @@ export async function renderBudget(ctx) {
         </button>`;
     }
     html += '</div>';
-    html += `<p class="budget-hint">Tippe eine Kategorie an, um ihr Budget für den Monat zu setzen. Rechts steht das verfügbare Guthaben.</p>`;
+    html += `<p class="budget-hint">Tippe eine Kategorie an, um ihr Budget für den Monat zu setzen. Rechts steht das verfügbare Guthaben. Neue Kategorien legst du oben rechts über „+“ an.</p>`;
   }
-
-  html += `<button class="btn btn--block btn--primary" id="add-category">+ Kategorie hinzufügen</button>`;
 
   ctx.view.innerHTML = html;
 
@@ -72,8 +71,6 @@ export async function renderBudget(ctx) {
     activeMonth = shiftMonth(activeMonth, 1);
     renderBudget(ctx);
   });
-
-  ctx.view.querySelector('#add-category')?.addEventListener('click', () => openCategoryModal(ctx));
 
   ctx.view.querySelectorAll('.budget-row').forEach((el) => {
     el.addEventListener('click', () => {

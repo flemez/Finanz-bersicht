@@ -4,7 +4,7 @@ import { register, setNotFound, startRouter, currentRoute, navigate } from './ro
 import { seedIfEmpty, postDueRecurring, migrateModel } from './store.js';
 import { renderBudget } from './views/budget.js';
 import { renderAccounts } from './views/accounts.js';
-import { renderErfassen } from './views/erfassen.js';
+import { renderBuchungen, openTransactionModal } from './views/buchungen.js';
 import { renderRecurring } from './views/recurring.js';
 import { renderCategories } from './views/categories.js';
 import { renderMore } from './views/more.js';
@@ -44,34 +44,41 @@ const ctx = {
   },
   refresh() {
     const { name } = currentRoute();
-    const handler = handlers[name] || handlers.erfassen;
+    const handler = handlers[name] || handlers.budget;
     handler();
   },
   navigate,
 };
 
 const handlers = {
-  erfassen: () => renderErfassen(ctx),
-  categories: () => renderCategories(ctx),
-  accounts: () => renderAccounts(ctx),
-  recurring: () => renderRecurring(ctx),
-  budget: () => renderBudget(ctx),
+  budget: () => renderBudget(ctx),        // Reiter "Aufteilung"
+  recurring: () => renderRecurring(ctx),  // Reiter "Fixkosten"
   more: () => renderMore(ctx),
+  // Unteransichten (über "Mehr" bzw. das schwebende "+")
+  accounts: () => renderAccounts(ctx),
+  transactions: () => renderBuchungen(ctx),
+  categories: () => renderCategories(ctx),
 };
 
 for (const [name, handler] of Object.entries(handlers)) {
   register(name, handler);
 }
-setNotFound(handlers.erfassen);
+setNotFound(handlers.budget);
 
-// Aktiven Tab in der unteren Leiste markieren.
+// Aktiven Reiter in der unteren Leiste markieren (auch Unteransichten
+// ihrem zugehörigen Reiter zuordnen).
+const TAB_OF = { budget: 'budget', recurring: 'recurring', more: 'more', accounts: 'more', transactions: 'more', categories: 'budget' };
 function updateTabbar() {
   const { name } = currentRoute();
+  const active = TAB_OF[name] || name;
   document.querySelectorAll('.tabbar__item').forEach((item) => {
-    item.classList.toggle('tabbar__item--active', item.dataset.route === name);
+    item.classList.toggle('tabbar__item--active', item.dataset.route === active);
   });
 }
 window.addEventListener('hashchange', updateTabbar);
+
+// Schwebendes "+" – schnelles Hinzufügen einer Buchung.
+document.getElementById('fab-add').addEventListener('click', () => openTransactionModal(ctx));
 
 async function boot() {
   // Service-Worker registrieren (offline-Fähigkeit).
@@ -103,7 +110,7 @@ async function boot() {
     console.warn('Fixkosten-Buchung fehlgeschlagen:', e);
   }
 
-  if (!location.hash) navigate('erfassen');
+  if (!location.hash) navigate('budget');
   startRouter();
   updateTabbar();
 }

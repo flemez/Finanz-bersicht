@@ -12,9 +12,11 @@ export async function renderMore(ctx) {
   ctx.view.innerHTML = `
     <div class="settings">
       <div class="settings-group">
-        <div class="settings-group__title">Fixkosten</div>
-        <p class="settings-note">Miete, Strom, Abos & Co. einmal festlegen – die App bucht sie jeden Monat automatisch (anteilig).</p>
-        <button class="btn btn--block" id="btn-recurring">Fixkosten verwalten</button>
+        <div class="settings-group__title">Verwalten</div>
+        <p class="settings-note">Konten, Buchungen und Kategorien verwalten.</p>
+        <button class="btn btn--block" id="btn-accounts">Konten verwalten</button>
+        <button class="btn btn--block" id="btn-transactions">Buchungen ansehen &amp; bearbeiten</button>
+        <button class="btn btn--block" id="btn-categories">Kategorien verwalten</button>
       </div>
 
       <div class="settings-group">
@@ -78,8 +80,10 @@ export async function renderMore(ctx) {
       </div>
     </div>`;
 
-  // Fixkosten verwalten.
-  ctx.view.querySelector('#btn-recurring').addEventListener('click', () => ctx.navigate('recurring'));
+  // Verwaltungs-Zugänge.
+  ctx.view.querySelector('#btn-accounts').addEventListener('click', () => ctx.navigate('accounts'));
+  ctx.view.querySelector('#btn-transactions').addEventListener('click', () => ctx.navigate('transactions'));
+  ctx.view.querySelector('#btn-categories').addEventListener('click', () => ctx.navigate('categories'));
 
   // Export als JSON-Datei herunterladen.
   ctx.view.querySelector('#btn-export').addEventListener('click', async () => {
