@@ -1,6 +1,6 @@
 // Budget-Ansicht: Geld pro Monat auf Kategorien verteilen (Umschlag-Prinzip).
 
-import { computeBudget, setBudgeted, addCategory, currentMonth } from '../store.js';
+import { computeBudget, setBudgeted, addCategory, deleteCategory, currentMonth } from '../store.js';
 import {
   formatCents,
   formatMonth,
@@ -8,7 +8,7 @@ import {
   parseAmountToCents,
   esc,
 } from '../format.js';
-import { openModal, toast } from '../ui.js';
+import { openModal, toast, confirmDialog } from '../ui.js';
 import { icon } from '../icons.js';
 
 let activeMonth = currentMonth();
@@ -90,12 +90,26 @@ function openBudgetModal(ctx, catId, name, currentValue) {
        <input class="field__input field__input--amount" name="amount" inputmode="decimal"
               value="${currentValue ? currentValue.toString().replace('.', ',') : ''}"
               placeholder="0,00" />
-     </label>`,
+     </label>
+     <button type="button" class="btn btn--block btn--danger" data-action="delete">Kategorie löschen</button>`,
     [
       { label: 'Abbrechen', value: 'cancel', variant: 'ghost' },
       { label: 'Speichern', value: 'ok', variant: 'primary' },
     ]
   );
+
+  m.el.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+    const ok = await confirmDialog(
+      'Kategorie löschen?',
+      'Die Kategorie und ihre Unterkategorien werden entfernt. Erfasste Buchungen bleiben erhalten, verlieren aber ihre Kategorie.'
+    );
+    if (!ok) return;
+    await deleteCategory(catId);
+    m.close();
+    toast('Kategorie gelöscht');
+    renderBudget(ctx);
+  });
+
   m.onSubmit(async (value, data, close) => {
     if (value !== 'ok') return close();
     const cents = parseAmountToCents(data.amount) ?? 0;
