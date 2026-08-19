@@ -1,7 +1,7 @@
 // Einstiegspunkt der App: Service-Worker, Ersteinrichtung, Routing, Navigation.
 
 import { register, setNotFound, startRouter, currentRoute, navigate } from './router.js';
-import { seedIfEmpty, postDueRecurring, migrateModel } from './store.js';
+import { seedIfEmpty, postDueRecurring, migrateModel, normalizeRecurringUncategorized } from './store.js';
 import { renderBudget } from './views/budget.js';
 import { renderAccounts } from './views/accounts.js';
 import { renderBuchungen, openTransactionModal } from './views/buchungen.js';
@@ -98,6 +98,13 @@ async function boot() {
   }
 
   await seedIfEmpty();
+
+  // Fixkosten/Einnahmen sind kategorielos – vorhandene Daten angleichen.
+  try {
+    await normalizeRecurringUncategorized();
+  } catch (e) {
+    console.warn('Angleichen der Fixkosten fehlgeschlagen:', e);
+  }
 
   // Fällige Fixkosten automatisch nachbuchen.
   try {
