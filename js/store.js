@@ -202,11 +202,12 @@ export async function setBudgeted(month, categoryId, cents) {
  * available (rollierend) und "Verfügbar zum Zuweisen".
  */
 export async function computeBudget(month) {
-  const [accounts, categories, transactions, budgets] = await Promise.all([
+  const [accounts, categories, transactions, budgets, recurring] = await Promise.all([
     db.getAll('accounts'),
     listCategories(),
     db.getAll('transactions'),
     db.getAll('budgets'),
+    db.getAll('recurring'),
   ]);
 
   const onBudgetIds = new Set(accounts.filter((a) => a.onBudget).map((a) => a.id));
@@ -247,20 +248,44 @@ export async function computeBudget(month) {
     };
   });
 
-  // "Verfügbar zum Zuweisen" = alle kategorielosen Beträge (Einnahmen wie
-  // Gehalt erhöhen ihn, kategorielose Fixkosten/Ausgaben mindern ihn) abzüglich
-  // dessen, was bereits auf Kategorien aufgeteilt wurde.
-  let unassignedToDate = 0;
+  // "Verfügbar zum Zuweisen" = Fixkosten-Saldo (Einnahmen − Fixkosten) plus
+  // manuelle kategorielose Buchungen, abzüglich des bereits Zugewiesenen.
+  //
+  // Der Fixkosten-Anteil kommt direkt aus den Regeln (nicht aus den erzeugten
+  // Buchungen), damit er sofort dem Betrag ganz oben im Fixkosten-Tab
+  // entspricht – auch wenn der Buchungstag im Monat noch nicht erreicht ist.
+  const isAutoRecurring = (note) =>
+    typeof note === 'string' &&
+    (note.startsWith('Automatische Fixkosten') || note.startsWith('Fixkosten anteilig'));
+
+  let manualUnassigned = 0;
   for (const t of transactions) {
     const m = (t.date || '').slice(0, 7);
-    if (m && m <= month && !t.categoryId && onBudgetIds.has(t.accountId)) {
-      unassignedToDate += t.amount || 0;
+    if (m && m <= month && !t.categoryId && onBudgetIds.has(t.accountId) && !isAutoRecurring(t.note)) {
+      manualUnassigned += t.amount || 0;
     }
   }
+
+  // Anzahl der Monate von startMonth bis zum angezeigten Monat (einschließlich).
+  const monthsInclusive = (start, end) => {
+    if (!start || start > end) return 0;
+    const [sy, sm] = start.split('-').map(Number);
+    const [ey, em] = end.split('-').map(Number);
+    return (ey - sy) * 12 + (em - sm) + 1;
+  };
+  let recurringUnassigned = 0;
+  for (const r of recurring) {
+    if (!r.active) continue;
+    const n = monthsInclusive(r.startMonth || month, month);
+    if (n <= 0) continue;
+    const per = monthlyCents(r);
+    recurringUnassigned += (r.type === 'income' ? per : -per) * n;
+  }
+
   let budgetedToDate = 0;
   for (const b of budgets) if (b.month <= month) budgetedToDate += b.budgeted || 0;
 
-  const toAssign = unassignedToDate - budgetedToDate;
+  const toAssign = manualUnassigned + recurringUnassigned - budgetedToDate;
 
   const totals = {
     budgeted: rows.reduce((s, r) => s + r.budgeted, 0),
