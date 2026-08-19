@@ -15,8 +15,10 @@ import {
 import { esc } from '../format.js';
 import { openModal, toast, confirmDialog } from '../ui.js';
 import { icon } from '../icons.js';
+import { attachSwipe, closeOpenSwipe } from '../swipe.js';
 
 export async function renderCategories(ctx) {
+  closeOpenSwipe(); // etwaige offene Wisch-Zeile aus vorherigem Render zurücksetzen
   const cats = await listCategoriesWithSubs();
 
   ctx.setHeader({ title: 'Kategorien', back: () => ctx.navigate('more') });
@@ -35,33 +37,43 @@ export async function renderCategories(ctx) {
     cats.forEach((c, ci) => {
       html += `
         <div class="budget-group">
-          <div class="budget-group__head">
-            <span class="budget-group__name">${esc(c.name)}</span>
-            <span class="cat-row__tools">
-              <button class="icon-btn" data-catmove="up" data-id="${c.id}" ${ci === 0 ? 'disabled' : ''} aria-label="Kategorie nach oben">${icon.up}</button>
-              <button class="icon-btn" data-catmove="down" data-id="${c.id}" ${ci === cats.length - 1 ? 'disabled' : ''} aria-label="Kategorie nach unten">${icon.down}</button>
-              <button class="icon-btn" data-addsub="${c.id}" aria-label="Unterkategorie hinzufügen">+</button>
-              <button class="icon-btn" data-editcat="${c.id}" aria-label="Kategorie bearbeiten">${icon.edit}</button>
-            </span>
+          <div class="swipe" data-swipe-cat="${c.id}">
+            <div class="swipe__delete">
+              <button class="swipe__delete-btn" data-delcat="${c.id}" aria-label="Kategorie „${esc(c.name)}" löschen">Löschen</button>
+            </div>
+            <div class="swipe__content budget-group__head">
+              <span class="budget-group__name">${esc(c.name)}</span>
+              <span class="cat-row__tools">
+                <button class="icon-btn" data-catmove="up" data-id="${c.id}" ${ci === 0 ? 'disabled' : ''} aria-label="Kategorie nach oben">${icon.up}</button>
+                <button class="icon-btn" data-catmove="down" data-id="${c.id}" ${ci === cats.length - 1 ? 'disabled' : ''} aria-label="Kategorie nach unten">${icon.down}</button>
+                <button class="icon-btn" data-addsub="${c.id}" aria-label="Unterkategorie hinzufügen">+</button>
+                <button class="icon-btn" data-editcat="${c.id}" aria-label="Kategorie bearbeiten">${icon.edit}</button>
+              </span>
+            </div>
           </div>`;
       if (c.subs.length === 0) {
         html += `<div class="cat-row cat-row--empty"><span class="cat-row__hint">Keine Unterkategorien (optional)</span></div>`;
       }
       c.subs.forEach((s, i) => {
         html += `
-          <div class="cat-row">
-            <span class="cat-row__name">${esc(s.name)}</span>
-            <span class="cat-row__tools">
-              <button class="icon-btn" data-submove="up" data-id="${s.id}" ${i === 0 ? 'disabled' : ''} aria-label="Nach oben">${icon.up}</button>
-              <button class="icon-btn" data-submove="down" data-id="${s.id}" ${i === c.subs.length - 1 ? 'disabled' : ''} aria-label="Nach unten">${icon.down}</button>
-              <button class="icon-btn" data-editsub="${s.id}" aria-label="Unterkategorie bearbeiten">${icon.edit}</button>
-            </span>
+          <div class="swipe" data-swipe-sub="${s.id}">
+            <div class="swipe__delete">
+              <button class="swipe__delete-btn" data-delsub="${s.id}" aria-label="Unterkategorie „${esc(s.name)}" löschen">Löschen</button>
+            </div>
+            <div class="swipe__content cat-row">
+              <span class="cat-row__name">${esc(s.name)}</span>
+              <span class="cat-row__tools">
+                <button class="icon-btn" data-submove="up" data-id="${s.id}" ${i === 0 ? 'disabled' : ''} aria-label="Nach oben">${icon.up}</button>
+                <button class="icon-btn" data-submove="down" data-id="${s.id}" ${i === c.subs.length - 1 ? 'disabled' : ''} aria-label="Nach unten">${icon.down}</button>
+                <button class="icon-btn" data-editsub="${s.id}" aria-label="Unterkategorie bearbeiten">${icon.edit}</button>
+              </span>
+            </div>
           </div>`;
       });
       html += '</div>';
     });
     html += '</div>';
-    html += `<p class="budget-hint">Über „+" fügst du eine optionale Unterkategorie hinzu. Mit dem Stift kannst du umbenennen, verschieben oder löschen; mit den Pfeilen sortieren.</p>`;
+    html += `<p class="budget-hint">Über „+" fügst du eine optionale Unterkategorie hinzu, mit dem Stift benennst du um, mit den Pfeilen sortierst du. Zum Löschen die Zeile nach links wischen.</p>`;
   }
 
   html += `<button class="btn btn--block btn--primary" id="add-cat">+ Neue Kategorie</button>`;
@@ -72,6 +84,16 @@ export async function renderCategories(ctx) {
   const allSubs = await listSubcategories();
 
   ctx.view.querySelector('#add-cat').addEventListener('click', () => openCategoryEditor(ctx, null));
+
+  // Swipe-to-Delete für Kategorien und Unterkategorien.
+  ctx.view.querySelectorAll('[data-swipe-cat]').forEach((el) => {
+    const c = allCats.find((x) => x.id === el.dataset.swipeCat);
+    attachSwipe(el, () => confirmDeleteCategory(ctx, c));
+  });
+  ctx.view.querySelectorAll('[data-swipe-sub]').forEach((el) => {
+    const s = allSubs.find((x) => x.id === el.dataset.swipeSub);
+    attachSwipe(el, () => confirmDeleteSubcategory(ctx, s));
+  });
   ctx.view.querySelectorAll('[data-editcat]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const c = allCats.find((x) => x.id === btn.dataset.editcat);
@@ -113,6 +135,40 @@ async function reorder(list, id, dir, saveFn) {
   for (let i = 0; i < sorted.length; i++) {
     if (sorted[i].sortOrder !== i) await saveFn({ ...sorted[i], sortOrder: i });
   }
+}
+
+// ---- Löschen (per Wisch-Geste) ---------------------------------------------
+
+/** Nachfrage stellen und Kategorie löschen. */
+async function confirmDeleteCategory(ctx, c) {
+  if (!c) return;
+  const ok = await confirmDialog(
+    `„${c.name}" löschen?`,
+    'Die Kategorie und ihre Unterkategorien werden entfernt. Erfasste Buchungen bleiben erhalten, verlieren aber ihre Kategorie.'
+  );
+  if (!ok) {
+    closeOpenSwipe();
+    return;
+  }
+  await deleteCategory(c.id);
+  toast('Kategorie gelöscht');
+  renderCategories(ctx);
+}
+
+/** Nachfrage stellen und Unterkategorie löschen. */
+async function confirmDeleteSubcategory(ctx, s) {
+  if (!s) return;
+  const ok = await confirmDialog(
+    `„${s.name}" löschen?`,
+    'Erfasste Buchungen bleiben erhalten, verlieren aber diese Unterkategorie.'
+  );
+  if (!ok) {
+    closeOpenSwipe();
+    return;
+  }
+  await deleteSubcategory(s.id);
+  toast('Unterkategorie gelöscht');
+  renderCategories(ctx);
 }
 
 // ---- Kategorie --------------------------------------------------------------

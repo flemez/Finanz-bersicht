@@ -243,6 +243,44 @@ body.no-scroll { overflow: hidden; }
 .cat-row--empty { padding: 10px 16px; }
 .cat-row__hint { color: var(--text-mute); font-size: 13px; font-style: italic; }
 
+/* ---- Swipe-to-Delete (iOS-Stil) ---- */
+.swipe {
+  position: relative;
+  overflow: hidden;
+}
+/* Roter Löschen-Button, der beim Wischen nach links sichtbar wird. */
+.swipe__delete {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 88px; /* muss zu OPEN_WIDTH in js/swipe.js passen */
+  display: flex;
+}
+.swipe__delete-btn {
+  flex: 1;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.swipe__delete-btn:active { background: color-mix(in srgb, var(--danger) 80%, #000); }
+/* Sichtbarer Inhalt liegt über dem Button und wird verschoben. */
+.swipe__content {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  transform: translateX(0);
+  touch-action: pan-y; /* vertikales Scrollen bleibt möglich */
+  will-change: transform;
+}
+/* Kategorie-Kopf behält seine eigene Hintergrundfarbe. */
+.budget-group__head.swipe__content { background: var(--bg-elev-2); }
+
 .budget-hint {
   margin: 4px 4px 0;
   font-size: 12px;
