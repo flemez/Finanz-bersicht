@@ -176,21 +176,34 @@ body.no-scroll { overflow: hidden; }
 .budget-group__sum { color: var(--text-dim); font-weight: 600; }
 
 .budget-row {
-  width: 100%;
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--border);
+}
+.budget-row__tap {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 16px;
+  padding: 13px 8px 13px 16px;
   background: transparent;
   border: none;
-  border-top: 1px solid var(--border);
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
-.budget-row:active { background: var(--bg-elev-2); }
+.budget-row__tap:active { background: var(--bg-elev-2); }
+.budget-row__del {
+  flex-shrink: 0;
+  margin-right: 6px;
+  color: var(--text-dim);
+  opacity: 0.6;
+  font-size: 16px;
+}
+.budget-row__del:active { opacity: 1; }
 .budget-row__info { flex: 1; min-width: 0; }
 .budget-row__name {
   display: block;

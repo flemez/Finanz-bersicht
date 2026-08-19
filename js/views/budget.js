@@ -49,16 +49,19 @@ export async function renderBudget(ctx) {
       const availClass =
         r.available > 0 ? 'is-positive' : r.available < 0 ? 'is-negative' : 'is-zero';
       html += `
-        <button class="budget-row" data-cat="${r.category.id}" data-budgeted="${r.budgeted}">
-          <span class="budget-row__info">
-            <span class="budget-row__name">${esc(r.category.name)}</span>
-            <span class="budget-row__meta">Budget ${formatCents(r.budgeted)} · Ausgegeben ${formatCents(r.activity)}</span>
-          </span>
-          <span class="budget-row__available badge ${availClass}">${formatCents(r.available)}</span>
-        </button>`;
+        <div class="budget-row">
+          <button class="budget-row__tap" data-cat="${r.category.id}" data-budgeted="${r.budgeted}">
+            <span class="budget-row__info">
+              <span class="budget-row__name">${esc(r.category.name)}</span>
+              <span class="budget-row__meta">Budget ${formatCents(r.budgeted)} · Ausgegeben ${formatCents(r.activity)}</span>
+            </span>
+            <span class="budget-row__available badge ${availClass}">${formatCents(r.available)}</span>
+          </button>
+          <button class="icon-btn budget-row__del" data-del="${r.category.id}" aria-label="Kategorie löschen">${icon.trash}</button>
+        </div>`;
     }
     html += '</div>';
-    html += `<p class="budget-hint">Tippe eine Kategorie an, um ihr Budget für den Monat zu setzen. Rechts steht das verfügbare Guthaben. Neue Kategorien legst du oben rechts über „+“ an.</p>`;
+    html += `<p class="budget-hint">Tippe eine Kategorie an, um ihr Budget für den Monat zu setzen. Der Papierkorb rechts löscht die Kategorie. Neue Kategorien legst du oben rechts über „+“ an.</p>`;
   }
 
   ctx.view.innerHTML = html;
@@ -72,12 +75,26 @@ export async function renderBudget(ctx) {
     renderBudget(ctx);
   });
 
-  ctx.view.querySelectorAll('.budget-row').forEach((el) => {
+  ctx.view.querySelectorAll('.budget-row__tap').forEach((el) => {
     el.addEventListener('click', () => {
       const catId = el.dataset.cat;
       const name = el.querySelector('.budget-row__name').textContent;
       const current = Number(el.dataset.budgeted) / 100;
       openBudgetModal(ctx, catId, name, current);
+    });
+  });
+
+  ctx.view.querySelectorAll('.budget-row__del').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const ok = await confirmDialog(
+        'Kategorie löschen?',
+        'Die Kategorie und ihre Unterkategorien werden entfernt. Erfasste Buchungen bleiben erhalten, verlieren aber ihre Kategorie.'
+      );
+      if (!ok) return;
+      await deleteCategory(btn.dataset.del);
+      toast('Kategorie gelöscht');
+      renderBudget(ctx);
     });
   });
 }
@@ -90,25 +107,12 @@ function openBudgetModal(ctx, catId, name, currentValue) {
        <input class="field__input field__input--amount" name="amount" inputmode="decimal"
               value="${currentValue ? currentValue.toString().replace('.', ',') : ''}"
               placeholder="0,00" />
-     </label>
-     <button type="button" class="btn btn--block btn--danger" data-action="delete">Kategorie löschen</button>`,
+     </label>`,
     [
       { label: 'Abbrechen', value: 'cancel', variant: 'ghost' },
       { label: 'Speichern', value: 'ok', variant: 'primary' },
     ]
   );
-
-  m.el.querySelector('[data-action="delete"]').addEventListener('click', async () => {
-    const ok = await confirmDialog(
-      'Kategorie löschen?',
-      'Die Kategorie und ihre Unterkategorien werden entfernt. Erfasste Buchungen bleiben erhalten, verlieren aber ihre Kategorie.'
-    );
-    if (!ok) return;
-    await deleteCategory(catId);
-    m.close();
-    toast('Kategorie gelöscht');
-    renderBudget(ctx);
-  });
 
   m.onSubmit(async (value, data, close) => {
     if (value !== 'ok') return close();
