@@ -1,6 +1,6 @@
 // Budget-Ansicht: Geld pro Monat auf Kategorien verteilen (Umschlag-Prinzip).
 
-import { computeBudget, setBudgeted, addCategory, deleteCategory, currentMonth } from '../store.js';
+import { computeBudget, setBudgeted, moveBudget, addCategory, deleteCategory, currentMonth } from '../store.js';
 import {
   formatCents,
   formatMonth,
@@ -80,7 +80,7 @@ export async function renderBudget(ctx) {
       const catId = el.dataset.cat;
       const name = el.querySelector('.budget-row__name').textContent;
       const current = Number(el.dataset.budgeted) / 100;
-      openBudgetModal(ctx, catId, name, current);
+      openBudgetModal(ctx, catId, name, current, data.rows);
     });
   });
 
@@ -99,7 +99,11 @@ export async function renderBudget(ctx) {
   });
 }
 
-function openBudgetModal(ctx, catId, name, currentValue) {
+function openBudgetModal(ctx, catId, name, currentValue, rows = []) {
+  const row = rows.find((r) => r.category.id === catId);
+  const available = row ? row.available : 0;
+  const canMove = rows.length > 1;
+
   const m = openModal(
     esc(name),
     `<label class="field">
@@ -107,12 +111,21 @@ function openBudgetModal(ctx, catId, name, currentValue) {
        <input class="field__input field__input--amount" name="amount" inputmode="decimal"
               value="${currentValue ? currentValue.toString().replace('.', ',') : ''}"
               placeholder="0,00" />
-     </label>`,
+     </label>
+     <p class="modal__text">Verfügbar in dieser Kategorie: <strong>${formatCents(available)}</strong></p>
+     ${canMove ? `<button type="button" class="btn btn--block btn--ghost" data-action="move">Guthaben verschieben …</button>` : ''}`,
     [
       { label: 'Abbrechen', value: 'cancel', variant: 'ghost' },
       { label: 'Speichern', value: 'ok', variant: 'primary' },
     ]
   );
+
+  if (canMove) {
+    m.el.querySelector('[data-action="move"]').addEventListener('click', () => {
+      m.close();
+      openMoveModal(ctx, catId, rows);
+    });
+  }
 
   m.onSubmit(async (value, data, close) => {
     if (value !== 'ok') return close();
@@ -120,6 +133,47 @@ function openBudgetModal(ctx, catId, name, currentValue) {
     await setBudgeted(activeMonth, catId, cents);
     close();
     toast('Budget gespeichert');
+    renderBudget(ctx);
+  });
+}
+
+/** Verfügbares Guthaben von einer Kategorie auf eine andere verschieben. */
+function openMoveModal(ctx, fromId, rows) {
+  const fromRow = rows.find((r) => r.category.id === fromId);
+  const fromName = fromRow ? fromRow.category.name : '';
+  const available = fromRow ? fromRow.available : 0;
+
+  const targetOptions = rows
+    .filter((r) => r.category.id !== fromId)
+    .map((r) => `<option value="${r.category.id}">${esc(r.category.name)} (${formatCents(r.available)})</option>`)
+    .join('');
+
+  const m = openModal(
+    'Guthaben verschieben',
+    `<p class="modal__text">Von <strong>${esc(fromName)}</strong> – verfügbar: <strong>${formatCents(available)}</strong></p>
+     <label class="field">
+       <span class="field__label">Betrag</span>
+       <input class="field__input field__input--amount" name="amount" inputmode="decimal" placeholder="0,00" autofocus />
+     </label>
+     <label class="field">
+       <span class="field__label">Auf Kategorie</span>
+       <select class="field__input field__input--big" name="toId">${targetOptions}</select>
+     </label>`,
+    [
+      { label: 'Abbrechen', value: 'cancel', variant: 'ghost' },
+      { label: 'Verschieben', value: 'ok', variant: 'primary' },
+    ]
+  );
+
+  m.onSubmit(async (value, data, close) => {
+    if (value !== 'ok') return close();
+    const cents = parseAmountToCents(data.amount);
+    if (cents == null || cents <= 0) return toast('Bitte einen gültigen Betrag eingeben');
+    if (!data.toId) return toast('Bitte eine Zielkategorie wählen');
+    await moveBudget(activeMonth, fromId, data.toId, cents);
+    close();
+    const toRow = rows.find((r) => r.category.id === data.toId);
+    toast(`${formatCents(cents)} → ${toRow ? toRow.category.name : 'Kategorie'}`);
     renderBudget(ctx);
   });
 }
