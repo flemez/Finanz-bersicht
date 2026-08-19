@@ -90,10 +90,12 @@ export async function renderRecurring(ctx) {
   }
 
   html += `<button class="btn btn--block btn--ghost" id="add-recurring">+ Fixkosten hinzufügen</button>`;
+  html += `<button class="btn btn--block btn--ghost" id="add-income">+ Einnahme hinzufügen</button>`;
 
   ctx.view.innerHTML = html;
 
-  ctx.view.querySelector('#add-recurring').addEventListener('click', () => openRecurringModal(ctx, null, accounts, cats));
+  ctx.view.querySelector('#add-recurring').addEventListener('click', () => openRecurringModal(ctx, null, accounts, cats, 'expense'));
+  ctx.view.querySelector('#add-income').addEventListener('click', () => openRecurringModal(ctx, null, accounts, cats, 'income'));
 
   ctx.view.querySelectorAll('[data-del]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
@@ -114,7 +116,7 @@ export async function renderRecurring(ctx) {
   });
 }
 
-async function openRecurringModal(ctx, existing, accounts, cats) {
+async function openRecurringModal(ctx, existing, accounts, cats, initialType = 'expense') {
   if (accounts.length === 0) {
     toast('Bitte zuerst ein Konto anlegen');
     ctx.navigate('accounts');
@@ -122,7 +124,7 @@ async function openRecurringModal(ctx, existing, accounts, cats) {
   }
   const isEdit = !!existing;
   const r = existing || {};
-  const type = r.type || 'expense';
+  const type = r.type || initialType;
   const curCat = r.categoryId ? cats.find((c) => c.id === r.categoryId) : null;
 
   const accOptions = accounts
@@ -134,8 +136,16 @@ async function openRecurringModal(ctx, existing, accounts, cats) {
     .map(([k, v]) => `<option value="${k}"${curInterval === k ? ' selected' : ''}>${v.label}</option>`)
     .join('');
 
+  const title = isEdit
+    ? type === 'income'
+      ? 'Einnahme bearbeiten'
+      : 'Fixkosten bearbeiten'
+    : type === 'income'
+      ? 'Neue Einnahme'
+      : 'Neue Fixkosten';
+
   const m = openModal(
-    isEdit ? 'Fixkosten bearbeiten' : 'Neue Fixkosten',
+    title,
     `<div class="segmented" role="tablist">
        <button type="button" class="segmented__btn ${type === 'expense' ? 'segmented__btn--active' : ''}" data-kind="expense">Ausgabe</button>
        <button type="button" class="segmented__btn ${type === 'income' ? 'segmented__btn--active' : ''}" data-kind="income">Einnahme</button>
