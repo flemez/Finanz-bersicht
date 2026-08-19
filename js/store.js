@@ -198,6 +198,20 @@ export async function setBudgeted(month, categoryId, cents) {
 }
 
 /**
+ * Verfügbares Guthaben von einer Kategorie auf eine andere verschieben.
+ * Erhöht/verringert dazu die Zuweisung des Monats – die Gesamtsumme bleibt
+ * gleich, „Verfügbar zum Zuweisen" ändert sich also nicht.
+ */
+export async function moveBudget(month, fromCategoryId, toCategoryId, cents) {
+  const amount = cents | 0;
+  if (amount <= 0 || fromCategoryId === toCategoryId) return;
+  const from = await getBudgeted(month, fromCategoryId);
+  const to = await getBudgeted(month, toCategoryId);
+  await setBudgeted(month, fromCategoryId, from - amount);
+  await setBudgeted(month, toCategoryId, to + amount);
+}
+
+/**
  * Budget-Übersicht für einen Monat (pro Kategorie): budgeted, activity,
  * available (rollierend) und "Verfügbar zum Zuweisen".
  */

@@ -81,10 +81,21 @@ window.addEventListener('hashchange', updateTabbar);
 document.getElementById('fab-add').addEventListener('click', () => openTransactionModal(ctx));
 
 async function boot() {
-  // Service-Worker registrieren (offline-Fähigkeit).
+  // Service-Worker registrieren (offline-Fähigkeit) und Updates zuverlässig
+  // ausliefern: sobald ein neuer Worker die Kontrolle übernimmt, wird die Seite
+  // einmal automatisch neu geladen, damit der neue Code auch am Handy greift.
   if ('serviceWorker' in navigator) {
     try {
-      await navigator.serviceWorker.register('./sw.js');
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloading) return;
+        reloading = true;
+        location.reload();
+      });
+      const reg = await navigator.serviceWorker.register('./sw.js');
+      reg.update();
+      // Regelmäßig auf einen neuen Stand prüfen (z. B. beim App-Start).
+      setInterval(() => reg.update(), 60 * 60 * 1000);
     } catch (e) {
       console.warn('Service-Worker konnte nicht registriert werden:', e);
     }
