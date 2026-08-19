@@ -247,17 +247,20 @@ export async function computeBudget(month) {
     };
   });
 
-  let incomeToDate = 0;
+  // "Verfügbar zum Zuweisen" = alle kategorielosen Beträge (Einnahmen wie
+  // Gehalt erhöhen ihn, kategorielose Fixkosten/Ausgaben mindern ihn) abzüglich
+  // dessen, was bereits auf Kategorien aufgeteilt wurde.
+  let unassignedToDate = 0;
   for (const t of transactions) {
     const m = (t.date || '').slice(0, 7);
-    if (m && m <= month && !t.categoryId && (t.amount || 0) > 0 && onBudgetIds.has(t.accountId)) {
-      incomeToDate += t.amount;
+    if (m && m <= month && !t.categoryId && onBudgetIds.has(t.accountId)) {
+      unassignedToDate += t.amount || 0;
     }
   }
   let budgetedToDate = 0;
   for (const b of budgets) if (b.month <= month) budgetedToDate += b.budgeted || 0;
 
-  const toAssign = incomeToDate - budgetedToDate;
+  const toAssign = unassignedToDate - budgetedToDate;
 
   const totals = {
     budgeted: rows.reduce((s, r) => s + r.budgeted, 0),
@@ -298,19 +301,19 @@ export async function addRecurring({
   type = 'expense',
   amount,
   interval = 'monthly',
-  categoryId = null,
-  subcategoryId = null,
   accountId,
   dayOfMonth = 1,
 }) {
+  // Fixkosten und Einnahmen sind bewusst kategorielos: Einnahmen erhöhen den
+  // im Aufteilungs-Tab verteilbaren Betrag, Fixkosten mindern ihn.
   const rec = {
     id: uid(),
     name: String(name).trim(),
     type,
     amount: Math.abs(amount | 0),
     interval: INTERVALS[interval] ? interval : 'monthly',
-    categoryId: type === 'income' ? null : categoryId || null,
-    subcategoryId: type === 'income' ? null : subcategoryId || null,
+    categoryId: null,
+    subcategoryId: null,
     accountId,
     dayOfMonth: Math.min(28, Math.max(1, dayOfMonth | 0)),
     active: true,
@@ -327,6 +330,31 @@ export async function updateRecurring(rec) {
 
 export async function deleteRecurring(id) {
   return db.remove('recurring', id);
+}
+
+/**
+ * Einmalige, idempotente Anpassung an das neue Modell: Fixkosten und
+ * Einnahmen sind jetzt kategorielos. Entfernt daher die Kategorie von
+ * vorhandenen Fixkosten-Regeln und von den automatisch daraus erzeugten
+ * Buchungen, damit "Verfügbar zum Zuweisen" korrekt (Einnahmen − Fixkosten)
+ * rechnet. Manuell erfasste Buchungen bleiben unberührt.
+ */
+export async function normalizeRecurringUncategorized() {
+  const recs = await db.getAll('recurring');
+  for (const r of recs) {
+    if (r.categoryId || r.subcategoryId) {
+      await db.put('recurring', { ...r, categoryId: null, subcategoryId: null });
+    }
+  }
+  const txns = await db.getAll('transactions');
+  const isAutoFixkosten = (note) =>
+    typeof note === 'string' &&
+    (note.startsWith('Automatische Fixkosten') || note.startsWith('Fixkosten anteilig'));
+  for (const t of txns) {
+    if (t.categoryId && isAutoFixkosten(t.note)) {
+      await db.put('transactions', { ...t, categoryId: null, subcategoryId: null });
+    }
+  }
 }
 
 export async function postDueRecurring() {
@@ -352,8 +380,8 @@ export async function postDueRecurring() {
         accountId: rec.accountId,
         date: `${month}-${day}`,
         payee: rec.name,
-        categoryId: rec.type === 'income' ? null : rec.categoryId || null,
-        subcategoryId: rec.type === 'income' ? null : rec.subcategoryId || null,
+        categoryId: null,
+        subcategoryId: null,
         amount: rec.type === 'income' ? perMonth : -perMonth,
         note:
           rec.interval && rec.interval !== 'monthly'
